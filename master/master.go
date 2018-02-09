@@ -29,21 +29,32 @@ func ExecServer(id int64) {
 // }
 
 func joinServer(id int64) {
+	const maxCount = 100
+	count := 0
 	fmt.Println("Join Server")
 	go ExecServer(id)
 	serverPort := strconv.FormatInt(baseServerPort+id, 10)
 
 	_, err := rpc.Dial("tcp", "localhost:"+serverPort)
-	for err == nil {
+	for err != nil && count < maxCount {
 		time.Sleep(time.Millisecond * 100)
+		count++
 		_, err = rpc.Dial("tcp", "localhost:"+serverPort)
 	}
 
-	fmt.Println("Connection established!")
+	if err != nil {
+		fmt.Printf("Connection failed at %d", id)
+	} else {
+		fmt.Println("Connection established!")
+	}
 
 }
 
 func main() {
 	joinServer(1)
+	joinServer(2)
+	for {
+
+	}
 
 }
