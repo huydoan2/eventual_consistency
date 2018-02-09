@@ -11,6 +11,7 @@ import (
 )
 
 const masterPort int64 = 3000
+const baseClientPort int64 = 4000
 const baseServerPort int64 = 5000
 const serverPortRange int64 = 10
 const LOGDIR = "log"
@@ -27,6 +28,44 @@ var RPCserver *rpc.Server
 
 // ServerService : RPC type for server services
 type ServerService int //temporary type
+
+// BreakConnection : RPC to break connection between servers
+//					: Reply 0 if conn existed and closed, 1 if never existed
+func (serverService *ServerService) BreakConnection(serverID *int64, reply *int64) error {
+	if client, ok := RPCclients[*serverID]; ok {
+		client.Close()
+		debug(id, fmt.Sprintf("Connection to server[%d] is broken successfully", *serverID))
+		delete(RPCclients, *serverID)
+		*reply = 0
+	} else {
+		debug(id, fmt.Sprintf("Tried to break connection to server[%d] but was already broken", *serverID))
+		*reply = 1
+	}
+	return nil
+}
+
+// CreateConnection : RPC to create connection between client and server with id
+//					: Reply 0 if conn existed and created, 1 if never existed
+func (serverService *ServerService) CreateConnection(serverID *int64, reply *int64) error {
+	if _, ok := RPCclients[*serverID]; !ok {
+		serverPort := strconv.FormatInt(baseServerPort+(*serverID), 10)
+		client, err := rpc.Dial("tcp", "localhost:"+serverPort)
+		if err == nil {
+			RPCclients[*serverID] = client
+			debug(id, fmt.Sprintf("Finished joining server[%d] to server[%d]\n", id, *serverID))
+		} else {
+			debug(id, err.Error())
+			panic(err)
+		}
+		debug(id, fmt.Sprintf("Connection to server[%d] is created successfully", *serverID))
+		RPCclients[*serverID] = client
+		*reply = 0
+	} else {
+		debug(id, fmt.Sprintf("Tried to create connection to server[%d] but was already created", *serverID))
+		*reply = 1
+	}
+	return nil
+}
 
 // ConnectAsClient : RPC call to connect to the target server as a client
 func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
@@ -45,6 +84,16 @@ func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
 	// Sucessfully connected to the target server
 	RPCclients[*targetID] = client // store the client handler
 	*reply = 1
+	return nil
+}
+
+//Cleanup: Function to cleanup before murder
+func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
+	for k, v := range RPCclients {
+		v.Close()
+		delete(RPCclients, k)
+	}
+	debug(id, "Cleanup complete. Prepare to die")
 	return nil
 }
 
@@ -131,9 +180,9 @@ func Init() {
 }
 
 func main() {
+	fmt.Printf("Server process %s started\n", os.Args[1])
 	id, _ = strconv.ParseInt(os.Args[1], 10, 64) // get id from command line
 	idStr = os.Args[1]
-	fmt.Printf("Server process %d started\n", id)
 
 	Init()
 
