@@ -10,7 +10,7 @@ import (
 )
 
 const masterPort int64 = 3000
-const baseClientPort int64 = 4000
+const baseClientPort int64 = 5000
 const baseServerPort int64 = 5000
 const clientPortRange int64 = 10
 const LOGDIR = "log"

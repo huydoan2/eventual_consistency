@@ -10,7 +10,7 @@ import (
 )
 
 var baseServerPort int64 = 5000
-var baseClientPort int64 = 4000
+var baseClientPort int64 = 5000
 var servers = make(map[int64]*rpc.Client)     // map[server id][server rpc handler]
 var clients = make(map[int64]*rpc.Client)     // map[server id][client rpc handler]
 var serverProcess = make(map[int64]*exec.Cmd) // map[server id][server procees]
@@ -49,6 +49,16 @@ func joinServer(id int64) {
 	const maxCount = 100
 	count := 0
 	fmt.Println("Join Server")
+	// 1. Check if server or client already, then print error and exit
+	// 2. Else continue
+
+	_, okServer := servers[id]
+	_, okClient := clients[id]
+	if okClient || okServer {
+		fmt.Printf("%d is already used\n", id)
+		return
+	}
+
 	go ExecServer(id)
 	serverPort := strconv.FormatInt(baseServerPort+id, 10)
 
@@ -72,6 +82,13 @@ func joinClient(clientId, serverID int64) {
 	const maxCount = 100
 	count := 0
 	fmt.Println("Join Client")
+
+	_, okServer := servers[clientId]
+	_, okClient := clients[clientId]
+	if okClient || okServer {
+		fmt.Printf("%d is already used\n", clientId)
+		return
+	}
 
 	go ExecClient(clientId, serverID)
 	clientPort := strconv.FormatInt(baseClientPort+clientId, 10)
@@ -120,18 +137,23 @@ func killServer(id int64) error {
 
 func breakConnection(id1 int64, id2 int64) error {
 	var reply1, reply2 int64
-	if id1 >= clientMinID && id1 <= clientMaxID {
-		if id2 >= clientMinID && id2 <= clientMaxID {
+	_, id1Client := clients[id1]
+	_, id1Server := servers[id1]
+	_, id2Client := clients[id2]
+	_, id2Server := servers[id2]
+
+	if id1Client {
+		if id2Client {
 			return errors.New("can't break connection between 2 clients")
-		} else if id2 >= serverMinID && id2 <= serverMaxID {
+		} else if id2Server {
 			clients[id1].Call("ClientService.BreakConnection", &id2, &reply1)
 		} else {
 			return errors.New("id2 out of range")
 		}
-	} else if id1 >= serverMinID && id1 <= serverMaxID {
-		if id2 >= clientMinID && id2 <= clientMaxID {
+	} else if id1Server {
+		if id2Client {
 			clients[id2].Call("ClientService.BreakConnection", &id1, &reply2)
-		} else if id2 >= serverMinID && id2 <= serverMaxID {
+		} else if id2Server {
 			servers[id1].Call("ServerService.BreakConnection", &id2, &reply1)
 			servers[id2].Call("ServerService.BreakConnection", &id1, &reply2)
 		} else {
@@ -151,18 +173,24 @@ func breakConnection(id1 int64, id2 int64) error {
 
 func createConnection(id1 int64, id2 int64) error {
 	var reply1, reply2 int64
-	if id1 >= clientMinID && id1 <= clientMaxID {
-		if id2 >= clientMinID && id2 <= clientMaxID {
+
+	_, id1Client := clients[id1]
+	_, id1Server := servers[id1]
+	_, id2Client := clients[id2]
+	_, id2Server := servers[id2]
+
+	if id1Client {
+		if id2Client {
 			return errors.New("can't create connection between 2 clients")
-		} else if id2 >= serverMinID && id2 <= serverMaxID {
+		} else if id2Server {
 			clients[id1].Call("ClientService.CreateConnection", &id2, &reply1)
 		} else {
 			return errors.New("id2 out of range")
 		}
-	} else if id1 >= serverMinID && id1 <= serverMaxID {
-		if id2 >= clientMinID && id2 <= clientMaxID {
+	} else if id1Server {
+		if id2Client {
 			clients[id2].Call("ClientService.CreateConnection", &id1, &reply2)
-		} else if id2 >= serverMinID && id2 <= serverMaxID {
+		} else if id2Server {
 			servers[id1].Call("ServerService.CreateConnection", &id2, &reply1)
 			servers[id2].Call("ServerService.CreateConnection", &id1, &reply2)
 		} else {
@@ -184,15 +212,22 @@ func main() {
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
-	joinServer(4)
+	//joinServer(4)
 	joinServer(5)
 
-	joinClient(11, 5)
+	joinClient(4, 5)
 
-	breakConnection(11, 5)
+	err := breakConnection(11, 5)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
 	breakConnection(2, 3)
 
-	createConnection(5, 11)
+	err = createConnection(5, 11)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 	createConnection(3, 2)
 	createConnection(3, 4)
 	for {

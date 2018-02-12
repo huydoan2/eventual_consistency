@@ -11,7 +11,7 @@ import (
 )
 
 const masterPort int64 = 3000
-const baseClientPort int64 = 4000
+const baseClientPort int64 = 5000
 const baseServerPort int64 = 5000
 const serverPortRange int64 = 10
 const LOGDIR = "log"
@@ -69,9 +69,9 @@ func (serverService *ServerService) CreateConnection(serverID *int64, reply *int
 
 // ConnectAsClient : RPC call to connect to the target server as a client
 func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
-	if *targetID < 0 || *targetID >= serverPortRange {
-		return errors.New("Server id is out of range")
-	}
+	// if *targetID < 0 || *targetID >= serverPortRange {
+	// 	return errors.New("Server id is out of range")
+	// }
 
 	targetPort := strconv.FormatInt(*targetID+baseServerPort, 10)
 	client, err := rpc.Dial("tcp", "localhost:"+targetPort)
