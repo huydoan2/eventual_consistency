@@ -8,6 +8,7 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	"../vectorclock/vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -21,6 +22,13 @@ var id int64
 var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
+
+// key-value store
+type Value struct{
+	val string,
+	clock VectorClock
+}
+var data = make(map[string]string)
 
 /*
 	RPC

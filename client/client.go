@@ -21,6 +21,9 @@ var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
 
+// key-value store cache
+var cache = make(map[string]string)
+
 /*
 	RPC
 */
