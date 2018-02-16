@@ -8,7 +8,8 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
-	"../vectorclock/vectorclock"
+
+	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -24,11 +25,35 @@ var RPCclients = make(map[int64]*rpc.Client) //store client struct for each conn
 var RPCserver *rpc.Server
 
 // key-value store
-type Value struct{
-	val string,
-	clock VectorClock
+type Value struct {
+	val   string
+	clock vectorclock.VectorClock
 }
-var data = make(map[string]string)
+
+type Payload struct {
+	key     string
+	val     string
+	valTime vectorclock.VectorClock
+	clock   vectorclock.VectorClock // current clock of the process
+}
+
+// Cache class
+type Cache struct {
+	data map[string]Value
+}
+
+func (c *Cache) Invalidate() {
+
+}
+
+func (c *Cache) Insert(p *Payload) {
+	c.data[p.key] = Value{p.val, p.clock}
+}
+
+var cache Cache
+var data = make(map[string]Value)
+
+var vClock vectorclock.VectorClock
 
 /*
 	RPC
@@ -40,6 +65,8 @@ type ServerService int //temporary type
 // BreakConnection : RPC to break connection between servers
 //					: Reply 0 if conn existed and closed, 1 if never existed
 func (serverService *ServerService) BreakConnection(serverID *int64, reply *int64) error {
+	debug(id, fmt.Sprintf("Breaking connection to Server[%d]...", *serverID))
+
 	if client, ok := RPCclients[*serverID]; ok {
 		client.Close()
 		debug(id, fmt.Sprintf("Connection to server[%d] is broken successfully", *serverID))
@@ -55,6 +82,8 @@ func (serverService *ServerService) BreakConnection(serverID *int64, reply *int6
 // CreateConnection : RPC to create connection between client and server with id
 //					: Reply 0 if conn existed and created, 1 if never existed
 func (serverService *ServerService) CreateConnection(serverID *int64, reply *int64) error {
+	debug(id, fmt.Sprintf("Creating connection to Server[%d]...", *serverID))
+
 	if _, ok := RPCclients[*serverID]; !ok {
 		serverPort := strconv.FormatInt(baseServerPort+(*serverID), 10)
 		client, err := rpc.Dial("tcp", "localhost:"+serverPort)
@@ -77,9 +106,7 @@ func (serverService *ServerService) CreateConnection(serverID *int64, reply *int
 
 // ConnectAsClient : RPC call to connect to the target server as a client
 func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
-	// if *targetID < 0 || *targetID >= serverPortRange {
-	// 	return errors.New("Server id is out of range")
-	// }
+	debug(id, fmt.Sprint("Connecting as client to Server[%d]...", *targetID))
 
 	targetPort := strconv.FormatInt(*targetID+baseServerPort, 10)
 	client, err := rpc.Dial("tcp", "localhost:"+targetPort)
@@ -95,8 +122,10 @@ func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
 	return nil
 }
 
-//Cleanup: Function to cleanup before murder
+// Cleanup: Function to cleanup before murder
 func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
+	debug(id, "Cleaning up before being terminated...")
+
 	for k, v := range RPCclients {
 		v.Close()
 		delete(RPCclients, k)
@@ -105,9 +134,49 @@ func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
 	return nil
 }
 
+// PrintStore: RPC returns to "client" the key-value store without the time information
+// reply: the memory will be allocated by the function. User only needs to provide pointer
+func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) error {
+	ret := make(map[string]string)
+
+	for k, v := range data {
+		ret[k] = v.val
+	}
+
+	reply = &ret
+
+	return nil
+}
+
+func (ss *ServerService) Put(clientReq *Payload, serverResp *Payload) error {
+
+	vClock.Update(&clientReq.clock)
+	vClock.Increment(id)
+	serverResp.clock = vClock
+
+	val, ok := data[clientReq.key]
+	if ok {
+		currClock := val.clock
+		cmp := currClock.Compare(&clientReq.clock)
+		if cmp == vectorclock.LESS {
+			data[clientReq.key] = Value{clientReq.val, clientReq.clock}
+		} else {
+			serverResp.key = clientReq.key
+			serverResp.val = val.val
+			serverResp.valTime = val.clock
+		}
+	} else {
+		data[clientReq.key] = Value{clientReq.val, clientReq.clock}
+	}
+
+	return nil
+}
+
 /*******************************************************/
 
 func connectToServers() {
+	debug(id, "Connecting to other available servers ...")
+
 	var count int64
 	for i := int64(0); i < serverPortRange; i++ {
 		if i == id {
@@ -135,7 +204,18 @@ func connectToServers() {
 
 var logger *log.Logger
 
+func CreateLogDir(dir string) {
+	if _, err := os.Stat("dir"); os.IsNotExist(err) {
+		err = os.Mkdir(dir, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func InitLogger() {
+	//CreateLogDir("../log")
+
 	f, err := os.OpenFile("../log/server"+idStr, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)
@@ -154,6 +234,8 @@ func Init() {
 	InitLogger()
 	debug(id, "Starting RPC server ...\n")
 
+	vClock.Id = id
+
 	// Register RPC server
 	//RPCserver = rpc.NewServer()
 	serverService := new(ServerService)
@@ -170,7 +252,6 @@ func Init() {
 	go rpc.Accept(RPCserverConn)
 
 	// Connect to other servers and ask them to connect to me
-	debug(id, "Connecting to other servers ...\n")
 	connectToServers()
 
 	debug(id, "Initialization finished!\n")

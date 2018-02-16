@@ -16,10 +16,9 @@ var clients = make(map[int64]*rpc.Client)     // map[server id][client rpc handl
 var serverProcess = make(map[int64]*exec.Cmd) // map[server id][server procees]
 var clientProcess = make(map[int64]*exec.Cmd) // map[client id][client process]
 
-var serverMinID int64 = 1
-var serverMaxID int64 = 10
-var clientMinID int64 = 11
-var clientMaxID int64 = 20
+type PutData struct {
+	key, value string
+}
 
 func ExecServer(id int64) {
 	server := exec.Command("../server/server", strconv.FormatInt(id, 10))
@@ -206,6 +205,52 @@ func createConnection(id1 int64, id2 int64) error {
 		fmt.Printf("Connection from %d to %d was already established\n", id2, id1)
 	}
 	return nil
+}
+
+func printStore(id int64) {
+	fmt.Printf("Pringting store of Server[%d]\n", id)
+	var server *rpc.Client
+	var ok bool
+	if server, ok = servers[id]; !ok {
+		fmt.Printf("Server[%d] does not exist\n", id)
+		return
+	}
+
+	var store map[string]string
+
+	err := server.Call("ServerService.PrintStore", nil, &store)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	for k, v := range store {
+		fmt.Printf("%s:%s\n", k, v)
+	}
+
+}
+
+func put(clientId int64, key, value string) {
+	fmt.Printf("Client[%d] putting %s:%s", clientId, key, value)
+	client, ok := clients[clientId]
+
+	if !ok {
+		fmt.Printf("Client[%d] does not exist\n", clientId)
+		return
+	}
+
+	var arg PutData
+	arg.key = key
+	arg.value = value
+	var reply int64
+	err := client.Call("ServerService.Put", &PutData{key, value}, &reply)
+
+	if err != nil {
+		fmt.Printf("Error putting\n")
+	} else {
+		fmt.Printf("Successfully put %s:%s", key, value)
+	}
+
 }
 
 func main() {
