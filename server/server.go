@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/huydoan2/eventual_consistency/cache"
 	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
@@ -24,34 +25,8 @@ var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
 
-// key-value store
-type Value struct {
-	val   string
-	clock vectorclock.VectorClock
-}
-
-type Payload struct {
-	key     string
-	val     string
-	valTime vectorclock.VectorClock
-	clock   vectorclock.VectorClock // current clock of the process
-}
-
-// Cache class
-type Cache struct {
-	data map[string]Value
-}
-
-func (c *Cache) Invalidate() {
-
-}
-
-func (c *Cache) Insert(p *Payload) {
-	c.data[p.key] = Value{p.val, p.clock}
-}
-
-var cache Cache
-var data = make(map[string]Value)
+var sCache cache.Cache
+var data = make(map[string]cache.Value)
 
 var vClock vectorclock.VectorClock
 
@@ -140,7 +115,7 @@ func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) err
 	ret := make(map[string]string)
 
 	for k, v := range data {
-		ret[k] = v.val
+		ret[k] = v.Val
 	}
 
 	reply = &ret
@@ -148,25 +123,25 @@ func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) err
 	return nil
 }
 
-func (ss *ServerService) Put(clientReq *Payload, serverResp *Payload) error {
+func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload) error {
 
-	vClock.Update(&clientReq.clock)
+	vClock.Update(&clientReq.Clock)
 	vClock.Increment(id)
-	serverResp.clock = vClock
+	serverResp.Clock = vClock
 
-	val, ok := data[clientReq.key]
+	val, ok := data[clientReq.Key]
 	if ok {
-		currClock := val.clock
-		cmp := currClock.Compare(&clientReq.clock)
+		currClock := val.Clock
+		cmp := currClock.Compare(&clientReq.Clock)
 		if cmp == vectorclock.LESS {
-			data[clientReq.key] = Value{clientReq.val, clientReq.clock}
+			data[clientReq.Key] = cache.Value{Val: clientReq.Val, Clock: clientReq.Clock}
 		} else {
-			serverResp.key = clientReq.key
-			serverResp.val = val.val
-			serverResp.valTime = val.clock
+			serverResp.Key = clientReq.Key
+			serverResp.Val = val.Val
+			serverResp.ValTime = val.Clock
 		}
 	} else {
-		data[clientReq.key] = Value{clientReq.val, clientReq.clock}
+		data[clientReq.Key] = cache.Value{Val: clientReq.Val, Clock: clientReq.Clock}
 	}
 
 	return nil

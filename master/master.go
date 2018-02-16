@@ -253,6 +253,24 @@ func put(clientId int64, key, value string) {
 
 }
 
+func get(clientId int64, key string) {
+	fmt.Printf("Getting key %s from Client[%d]", key, clientId)
+
+	client, ok := clients[clientId]
+	if !ok {
+		fmt.Printf("Client[%d] does not exist\n", clientId)
+	}
+
+	var reply string
+	err := client.Call("ClientService.Get", &key, &reply)
+
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Printf("%s:%s", key, reply)
+	}
+}
+
 func main() {
 	joinServer(1)
 	joinServer(2)
@@ -262,19 +280,24 @@ func main() {
 
 	joinClient(4, 5)
 
-	err := breakConnection(11, 5)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+	// err := breakConnection(11, 5)
+	// if err != nil {
+	// 	fmt.Println(err.Error())
+	// }
 
-	breakConnection(2, 3)
+	// breakConnection(2, 3)
 
-	err = createConnection(5, 11)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+	// err = createConnection(5, 11)
+	// if err != nil {
+	// 	fmt.Println(err.Error())
+	// }
+
 	createConnection(3, 2)
 	createConnection(3, 4)
+	put(4, "1", "a")
+
+	put(4, "2", "b")
+	put(4, "3", "c")
 	for {
 
 	}

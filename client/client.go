@@ -11,7 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"../vectorclock"
+	"github.com/huydoan2/eventual_consistency/cache"
+	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -26,35 +27,8 @@ var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
 
-// key-value store cache
-type Value struct {
-	val   string
-	clock vectorclock.VectorClock
-}
-
-type Payload struct {
-	key     string
-	val     string
-	valTime vectorclock.VectorClock
-	clock   vectorclock.VectorClock // current clock of the process
-}
-
-// Cache class
-type Cache struct {
-	data map[string]Value
-}
-
-func (c *Cache) Invalidate() {
-
-}
-
-func (c *Cache) Insert(p *Payload) {
-	c.data[p.key] = Value{p.val, p.valTime}
-}
-
-//var cache = make(map[string]Value)
-var cache Cache
-var vClock vectorclock.VectorClock
+var cCache cache.Cache             // Client cache
+var vClock vectorclock.VectorClock // local vector clock
 
 /*
 	RPC
@@ -69,7 +43,7 @@ type PutData struct {
 
 // BreakConnection : RPC to break connection between client and server with id
 //					: Reply 0 if conn existed and closed, 1 if never existed
-func (clientService *ClientService) BreakConnection(serverID *int64, reply *int64) error {
+func (cs *ClientService) BreakConnection(serverID *int64, reply *int64) error {
 	debug(id, fmt.Sprintf("Breaking connection to Server[%d]...", *serverID))
 
 	if client, ok := RPCclients[*serverID]; ok {
@@ -86,7 +60,7 @@ func (clientService *ClientService) BreakConnection(serverID *int64, reply *int6
 
 // CreateConnection : RPC to create connection between client and server with id
 //					: Reply 0 if conn existed and created, 1 if never existed
-func (clientService *ClientService) CreateConnection(serverID *int64, reply *int64) error {
+func (cs *ClientService) CreateConnection(serverID *int64, reply *int64) error {
 	if _, ok := RPCclients[*serverID]; !ok {
 		serverPort := strconv.FormatInt(baseServerPort+(*serverID), 10)
 		client, err := rpc.Dial("tcp", "localhost:"+serverPort)
@@ -108,7 +82,7 @@ func (clientService *ClientService) CreateConnection(serverID *int64, reply *int
 }
 
 // Put: RPC to put key:value to a server
-func (clientServerce *ClientService) Put(putData *PutData, reply *int64) error {
+func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 
 	debug(id, fmt.Sprintf("Putting %s:%s ...", putData.key, putData.value))
 
@@ -118,30 +92,18 @@ func (clientServerce *ClientService) Put(putData *PutData, reply *int64) error {
 		return errors.New("Client does not connect to any servers")
 	}
 
-	// Get a random position in the server set
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	serverPos := r.Int63n(int64(length))
-	var server *rpc.Client
-	var i int64
-	// A bit complex to get a random server
-	for _, server = range RPCclients {
-		if i == serverPos {
-			break
-		} else {
-			i++
-		}
-	}
+	server := getRandomServer()
 
-	var data Payload
-	data.key = putData.key
-	data.val = putData.value
+	var data cache.Payload
+	data.Key = putData.key
+	data.Val = putData.value
 	vClock.Increment(id)
-	data.clock = vClock
+	data.Clock = vClock
 
 	// cache the put request
-	cache.Insert(&data)
+	cCache.Insert(&data)
 
-	var serverResp Payload
+	var serverResp cache.Payload
 	// We have a server now, put data to it
 	err := server.Call("ServerService.Put", &data, &serverResp) // TODO: need to support if server fails in the middle
 
@@ -150,11 +112,42 @@ func (clientServerce *ClientService) Put(putData *PutData, reply *int64) error {
 		return err
 	}
 
-	vClock.Update(&serverResp.clock)
+	vClock.Update(&serverResp.Clock)
 
-	if serverResp.key != "" {
-		cache.Insert(&serverResp)
+	if serverResp.Key != "" {
+		cCache.Insert(&serverResp)
 	}
+
+	return nil
+}
+
+// Get: RPC to querry the value of a key
+func (cs *ClientService) Get(key *string, reply *string) error {
+	val, ok := cCache.Find(key)
+
+	// Found the entry in the cache
+	if ok {
+		*reply = val.Val
+		return nil
+	}
+
+	// If not, query a server for the key
+	server := getRandomServer()
+	var data cache.Payload
+
+	err := server.Call("ServerService.Get", &key, &data)
+	if err != nil {
+		// Error with RPC call or from the server
+		s := fmt.Sprintf("Failed to communicate with server\nError: %v", err)
+		debug(id, s)
+		return errors.New(s)
+	}
+
+	// Get the reply from the server, update the cache
+	cCache.Insert(&data)
+
+	//return value to the master
+	*reply = data.Val
 
 	return nil
 }
@@ -216,6 +209,24 @@ func Init(serverId int64) {
 	go rpc.Accept(RPCclientConn)
 
 	debug(id, "Initialization finished!\n")
+}
+
+func getRandomServer() *rpc.Client {
+	length := len(RPCclients)
+	// Get a random position in the server set
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	serverPos := r.Int63n(int64(length))
+	var server *rpc.Client
+	var i int64
+	// A bit complex to get a random server
+	for _, server = range RPCclients {
+		if i == serverPos {
+			break
+		} else {
+			i++
+		}
+	}
+	return server
 }
 
 func main() {

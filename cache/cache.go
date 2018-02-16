@@ -1,17 +1,20 @@
 package cache
 
-import "../vectorclock"
+import (
+	"github.com/huydoan2/eventual_consistency/vectorclock"
+)
 
 // key-value store cache
 type Value struct {
-	val   string
-	clock vectorclock.VectorClock
+	Val   string
+	Clock vectorclock.VectorClock
 }
 
 type Payload struct {
-	key   string
-	val   Value                   // value and the clock associated with it
-	clock vectorclock.VectorClock // current clock of the process
+	Key     string
+	Val     string
+	ValTime vectorclock.VectorClock
+	Clock   vectorclock.VectorClock // current clock of the process
 }
 
 // Cache class
@@ -20,9 +23,14 @@ type Cache struct {
 }
 
 func (c *Cache) Invalidate() {
-
+	c.data = make(map[string]Value)
 }
 
 func (c *Cache) Insert(p *Payload) {
-	c.data[p.key] = Value{p.val, p.clock}
+	c.data[p.Key] = Value{p.Val, p.ValTime}
+}
+
+func (c *Cache) Find(key *string) (Value, bool) {
+	v, ok := c.data[*key]
+	return v, ok
 }
