@@ -280,8 +280,10 @@ func main() {
 	//joinServer(4)
 	joinServer(5)
 
-	joinClient(4, 5)
+	joinClient(4, 2)
 	joinClient(6, 2)
+	joinClient(7, 2)
+	//joinClient(7, 5)
 
 	// err := breakConnection(11, 5)
 	// if err != nil {
@@ -295,14 +297,14 @@ func main() {
 	// 	fmt.Println(err.Error())
 	// }
 
-	createConnection(4, 1)
-	createConnection(4, 2)
-	createConnection(3, 4)
+	// createConnection(4, 1)
+	// createConnection(4, 2)
+	// createConnection(3, 4)
 
 	put(4, "1", "a")
-	put(4, "2", "b")
-	put(4, "3", "c")
-	put(4, "4", "d")
+	put(6, "1", "b")
+	put(7, "1", "c")
+	put(7, "1", "d")
 
 	// printStore(1)
 	// printStore(2)
@@ -310,6 +312,7 @@ func main() {
 	// printStore(5)
 
 	get(4, "1")
+	get(7, "1")
 	get(6, "1")
 
 	for {

@@ -1,6 +1,7 @@
 package vectorclock
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 )
@@ -23,10 +24,10 @@ func (t *TimeStamp) Compare(other *TimeStamp) Cmp {
 	var count = 0
 	out := LESS
 	for k, v := range t.Time {
-		if out == GREATER && other.Time[k] < v {
+		if out == GREATER && other.Time[k] > v {
 			count++
 			out = LESS
-		} else if out == LESS && other.Time[k] > v {
+		} else if out == LESS && other.Time[k] < v {
 			count++
 			out = GREATER
 		}
@@ -77,4 +78,19 @@ func (t *VectorClock) Increment(id int64) {
 		panic(fmt.Sprintf("VectorClock: id %d is out of range", id))
 	}
 	t.Time.Increment(id)
+}
+
+func (t *VectorClock) ToString() string {
+	var buffer bytes.Buffer
+	buffer.WriteString("<<")
+
+	i := 0
+	for ; i < MAXPROC-1; i++ {
+		buffer.WriteString(fmt.Sprintf("%d, ", t.Time.Time[i]))
+	}
+
+	buffer.WriteString(fmt.Sprintf("%d>, ", t.Time.Time[i]))
+	buffer.WriteString(fmt.Sprintf("%d>", t.Id))
+
+	return buffer.String()
 }

@@ -125,24 +125,57 @@ func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) err
 }
 
 func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload) error {
-	debug(id, "Starting put ...")
+	debug(id, fmt.Sprintf("Starting put %s:%s ...", (*clientReq).Key, (*clientReq).Val))
 
 	vClock.Update(&clientReq.Clock)
 	vClock.Increment(id)
 	serverResp.Clock = vClock
+	update := 0
+
 	val, ok := data[clientReq.Key]
 	if ok {
 		currClock := val.Clock
 		cmp := currClock.Compare(&clientReq.Clock)
+		debug(id, fmt.Sprintf("Client Clock: %s", clientReq.Clock.ToString()))
+		debug(id, fmt.Sprintf("Current Clock: %s", currClock.ToString()))
 		if cmp == vectorclock.LESS {
 			data[clientReq.Key] = cache.Value{Val: clientReq.Val, Clock: clientReq.Clock}
+			update = 1
 		} else {
+			debug(id, "Record not updated")
 			serverResp.Key = clientReq.Key
 			serverResp.Val = val.Val
 			serverResp.ValTime = val.Clock
 		}
 	} else {
 		data[clientReq.Key] = cache.Value{Val: clientReq.Val, Clock: clientReq.Clock}
+		update = 1
+	}
+
+	if update == 1 {
+		debug(id, "Record updated")
+	}
+
+	return nil
+}
+
+func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload) error {
+	debug(id, "Starting get...")
+
+	// Clock Update
+	vClock.Update(&clientReq.Clock)
+	vClock.Increment(id)
+	serverResp.Clock = vClock
+
+	// Check if it exists in data. If not return ERR_KEY
+	val, ok := data[clientReq.Key]
+	if ok {
+		serverResp.Key = clientReq.Key
+		serverResp.Val = val.Val
+		serverResp.ValTime = val.Clock
+	} else {
+		serverResp.Key = clientReq.Key
+		serverResp.Val = "ERR_KEY"
 	}
 
 	return nil

@@ -101,9 +101,9 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 	data.Clock = vClock
 
 	// cache the put request
-	debug(id, "Caching")
-	debug(id, data.Key)
-	debug(id, data.Val)
+	// debug(id, "Caching")
+	// debug(id, data.Key)
+	// debug(id, data.Val)
 	// debug(id, fmt.Sprintf(data.ValTime))
 
 	cCache.Insert(&data)
@@ -145,8 +145,9 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 	server := getRandomServer()
 
 	var data cache.Payload
+	arg := cache.Payload{Key: *key, Clock: vClock}
 
-	err := server.Call("ServerService.Get", &key, &data)
+	err := server.Call("ServerService.Get", &arg, &data)
 	if err != nil {
 		// Error with RPC call or from the server
 		s := fmt.Sprintf("Failed to communicate with server\nError: %v", err)
@@ -154,7 +155,17 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 		return errors.New(s)
 	}
 
-	// Get the reply from the server, update the cache
+	// RPC succeeded, sync time
+	vClock.Update(&data.Clock)
+
+	// Check the replied data from the server
+	if data.Val == "ERR_KEY" {
+		debug(id, fmt.Sprintf("%s:ERR_KEY", *key))
+		*reply = "ERR_KEY"
+		return nil
+	}
+
+	// Server has the value, update the cache
 	cCache.Insert(&data)
 
 	//return value to the master
