@@ -19,7 +19,7 @@ master:
 	cd ..
 
 .PHONY: cache
-cache:
+cache: vectorclock
 	cd $(ROOT)/cache;	go build
 	cd ..
 
@@ -30,7 +30,7 @@ vectorclock:
 
 .PHONY: run
 run:
-	$(ROOT)/master/master
+	cd $(ROOT)/master; ./master
 
 .PHONY: clean
 clean:

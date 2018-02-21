@@ -19,18 +19,26 @@ type Payload struct {
 
 // Cache class
 type Cache struct {
-	data map[string]Value
+	Data map[string]Value
+}
+
+// New initialize a new cache
+func New() *Cache {
+	c := new(Cache)
+	c.Data = make(map[string]Value)
+	return c
 }
 
 func (c *Cache) Invalidate() {
-	c.data = make(map[string]Value)
+	c.Data = make(map[string]Value)
 }
 
 func (c *Cache) Insert(p *Payload) {
-	c.data[p.Key] = Value{p.Val, p.ValTime}
+
+	c.Data[p.Key] = Value{p.Val, p.ValTime}
 }
 
 func (c *Cache) Find(key *string) (Value, bool) {
-	v, ok := c.data[*key]
+	v, ok := c.Data[*key]
 	return v, ok
 }

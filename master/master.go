@@ -17,7 +17,7 @@ var serverProcess = make(map[int64]*exec.Cmd) // map[server id][server procees]
 var clientProcess = make(map[int64]*exec.Cmd) // map[client id][client process]
 
 type PutData struct {
-	key, value string
+	Key, Value string
 }
 
 func ExecServer(id int64) {
@@ -171,6 +171,7 @@ func breakConnection(id1 int64, id2 int64) error {
 }
 
 func createConnection(id1 int64, id2 int64) error {
+	fmt.Printf("Creating connection between [%d]-[%d]\n", id1, id2)
 	var reply1, reply2 int64
 
 	_, id1Client := clients[id1]
@@ -208,7 +209,7 @@ func createConnection(id1 int64, id2 int64) error {
 }
 
 func printStore(id int64) {
-	fmt.Printf("Pringting store of Server[%d]\n", id)
+	fmt.Printf("Printing store of Server[%d]\n", id)
 	var server *rpc.Client
 	var ok bool
 	if server, ok = servers[id]; !ok {
@@ -217,8 +218,9 @@ func printStore(id int64) {
 	}
 
 	var store map[string]string
+	var dummy int64
 
-	err := server.Call("ServerService.PrintStore", nil, &store)
+	err := server.Call("ServerService.PrintStore", &dummy, &store)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -231,7 +233,7 @@ func printStore(id int64) {
 }
 
 func put(clientId int64, key, value string) {
-	fmt.Printf("Client[%d] putting %s:%s", clientId, key, value)
+	fmt.Printf("Client[%d] putting %s:%s\n", clientId, key, value)
 	client, ok := clients[clientId]
 
 	if !ok {
@@ -240,21 +242,21 @@ func put(clientId int64, key, value string) {
 	}
 
 	var arg PutData
-	arg.key = key
-	arg.value = value
+	arg.Key = key
+	arg.Value = value
 	var reply int64
-	err := client.Call("ServerService.Put", &PutData{key, value}, &reply)
+	err := client.Call("ClientService.Put", &arg, &reply)
 
 	if err != nil {
-		fmt.Printf("Error putting\n")
+		fmt.Printf("Error putting\t%v\n", err)
 	} else {
-		fmt.Printf("Successfully put %s:%s", key, value)
+		fmt.Printf("Successfully put %s:%s\n", key, value)
 	}
 
 }
 
 func get(clientId int64, key string) {
-	fmt.Printf("Getting key %s from Client[%d]", key, clientId)
+	fmt.Printf("Getting key %s from Client[%d]\n", key, clientId)
 
 	client, ok := clients[clientId]
 	if !ok {
@@ -267,7 +269,7 @@ func get(clientId int64, key string) {
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Printf("%s:%s", key, reply)
+		fmt.Printf("%s:%s\n", key, reply)
 	}
 }
 
@@ -279,6 +281,7 @@ func main() {
 	joinServer(5)
 
 	joinClient(4, 5)
+	joinClient(6, 2)
 
 	// err := breakConnection(11, 5)
 	// if err != nil {
@@ -292,12 +295,23 @@ func main() {
 	// 	fmt.Println(err.Error())
 	// }
 
-	createConnection(3, 2)
+	createConnection(4, 1)
+	createConnection(4, 2)
 	createConnection(3, 4)
-	put(4, "1", "a")
 
+	put(4, "1", "a")
 	put(4, "2", "b")
 	put(4, "3", "c")
+	put(4, "4", "d")
+
+	// printStore(1)
+	// printStore(2)
+	// printStore(3)
+	// printStore(5)
+
+	get(4, "1")
+	get(6, "1")
+
 	for {
 
 	}

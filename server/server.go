@@ -25,7 +25,7 @@ var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
 
-var sCache cache.Cache
+var sCache *cache.Cache
 var data = make(map[string]cache.Value)
 
 var vClock vectorclock.VectorClock
@@ -112,23 +112,24 @@ func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
 // PrintStore: RPC returns to "client" the key-value store without the time information
 // reply: the memory will be allocated by the function. User only needs to provide pointer
 func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) error {
-	ret := make(map[string]string)
+	//ret := make(map[string]string)
 
+	debug(id, "Printing Store now")
 	for k, v := range data {
-		ret[k] = v.Val
+		(*reply)[k] = v.Val
+		debug(id, fmt.Sprintf("%s: %s", k, (*reply)[k]))
 	}
-
-	reply = &ret
+	//reply = &ret
 
 	return nil
 }
 
 func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload) error {
+	debug(id, "Starting put ...")
 
 	vClock.Update(&clientReq.Clock)
 	vClock.Increment(id)
 	serverResp.Clock = vClock
-
 	val, ok := data[clientReq.Key]
 	if ok {
 		currClock := val.Clock
@@ -210,6 +211,9 @@ func Init() {
 	debug(id, "Starting RPC server ...\n")
 
 	vClock.Id = id
+
+	// Init cache
+	sCache = cache.New()
 
 	// Register RPC server
 	//RPCserver = rpc.NewServer()

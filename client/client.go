@@ -27,7 +27,7 @@ var idStr string
 var RPCclients = make(map[int64]*rpc.Client) //store client struct for each connection
 var RPCserver *rpc.Server
 
-var cCache cache.Cache             // Client cache
+var cCache *cache.Cache            // Client cache
 var vClock vectorclock.VectorClock // local vector clock
 
 /*
@@ -38,7 +38,7 @@ var vClock vectorclock.VectorClock // local vector clock
 type ClientService int //temporary type
 
 type PutData struct {
-	key, value string
+	Key, Value string
 }
 
 // BreakConnection : RPC to break connection between client and server with id
@@ -84,7 +84,7 @@ func (cs *ClientService) CreateConnection(serverID *int64, reply *int64) error {
 // Put: RPC to put key:value to a server
 func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 
-	debug(id, fmt.Sprintf("Putting %s:%s ...", putData.key, putData.value))
+	debug(id, fmt.Sprintf("Putting %s:%s ...", putData.Key, putData.Value))
 
 	// Check if the client is connected to any server
 	length := len(RPCclients)
@@ -95,16 +95,26 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 	server := getRandomServer()
 
 	var data cache.Payload
-	data.Key = putData.key
-	data.Val = putData.value
+	data.Key = putData.Key
+	data.Val = putData.Value
 	vClock.Increment(id)
 	data.Clock = vClock
 
 	// cache the put request
+	debug(id, "Caching")
+	debug(id, data.Key)
+	debug(id, data.Val)
+	// debug(id, fmt.Sprintf(data.ValTime))
+
 	cCache.Insert(&data)
+	//tmp := make(map[string]cache.Value)
+	//val := cache.Value{Val: data.Val, Clock: data.ValTime}
+	//debug(id, "Created value")
+	//cCache.Data[data.Key] = val
 
 	var serverResp cache.Payload
 	// We have a server now, put data to it
+	debug(id, "Calling Put RPC from server")
 	err := server.Call("ServerService.Put", &data, &serverResp) // TODO: need to support if server fails in the middle
 
 	if err != nil {
@@ -133,6 +143,7 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 
 	// If not, query a server for the key
 	server := getRandomServer()
+
 	var data cache.Payload
 
 	err := server.Call("ServerService.Get", &key, &data)
@@ -177,6 +188,9 @@ func Init(serverId int64) {
 
 	// Init VectorClock
 	vClock.Id = id
+
+	// Init Cache
+	cCache = cache.New()
 
 	// Connect to serverId
 	tmp := fmt.Sprintf("Connecting to Server[%d]", serverId)
@@ -226,6 +240,7 @@ func getRandomServer() *rpc.Client {
 			i++
 		}
 	}
+	debug(id, fmt.Sprintf("Chosen server is %d", serverPos))
 	return server
 }
 

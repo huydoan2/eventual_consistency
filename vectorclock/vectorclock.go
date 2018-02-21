@@ -7,26 +7,26 @@ import (
 
 const MAXPROC = 10
 
-type cmp int
+type Cmp int
 
 const (
-	LESS cmp = iota
+	LESS Cmp = iota
 	GREATER
 	CONCURENT
 )
 
 type TimeStamp struct {
-	time [MAXPROC]int64
+	Time [MAXPROC]int64
 }
 
-func (t *TimeStamp) Compare(other *TimeStamp) cmp {
+func (t *TimeStamp) Compare(other *TimeStamp) Cmp {
 	var count = 0
 	out := LESS
-	for k, v := range t.time {
-		if out == GREATER && other.time[k] < v {
+	for k, v := range t.Time {
+		if out == GREATER && other.Time[k] < v {
 			count++
 			out = LESS
-		} else if out == LESS && other.time[k] > v {
+		} else if out == LESS && other.Time[k] > v {
 			count++
 			out = GREATER
 		}
@@ -43,12 +43,12 @@ func (t *TimeStamp) Increment(id int64) {
 	if id > 9 {
 		panic(fmt.Sprintf("VectorClock: id %d is out of range", id))
 	}
-	t.time[id]++
+	t.Time[id]++
 }
 
 func (t *TimeStamp) Update(other *TimeStamp) {
-	for k, _ := range t.time {
-		t.time[k] = int64(math.Max(float64(t.time[k]), float64(other.time[k])))
+	for k, _ := range t.Time {
+		t.Time[k] = int64(math.Max(float64(t.Time[k]), float64(other.Time[k])))
 	}
 }
 
@@ -57,7 +57,7 @@ type VectorClock struct {
 	Id   int64
 }
 
-func (t *VectorClock) Compare(other *VectorClock) cmp {
+func (t *VectorClock) Compare(other *VectorClock) Cmp {
 	out := t.Time.Compare(&other.Time)
 	if out == CONCURENT {
 		if t.Id > other.Id {
