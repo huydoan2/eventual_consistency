@@ -8,6 +8,8 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/huydoan2/eventual_consistency/cache"
 	"github.com/huydoan2/eventual_consistency/vectorclock"
@@ -29,6 +31,10 @@ var sCache *cache.Cache
 var data = make(map[string]cache.Value)
 
 var vClock vectorclock.VectorClock
+var lockInTree sync.Mutex
+var bIntree bool
+var lockCache sync.Mutex
+var listChild []*rpc.Client
 
 /*
 	RPC
@@ -36,6 +42,11 @@ var vClock vectorclock.VectorClock
 
 // ServerService : RPC type for server services
 type ServerService int //temporary type
+
+type StabilizePayload struct {
+	IsChild bool
+	Cache   cache.Cache
+}
 
 // BreakConnection : RPC to break connection between servers
 //					: Reply 0 if conn existed and closed, 1 if never existed
@@ -81,7 +92,7 @@ func (serverService *ServerService) CreateConnection(serverID *int64, reply *int
 
 // ConnectAsClient : RPC call to connect to the target server as a client
 func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
-	debug(id, fmt.Sprint("Connecting as client to Server[%d]...", *targetID))
+	debug(id, fmt.Sprintf("Connecting as client to Server[%d]...", *targetID))
 
 	targetPort := strconv.FormatInt(*targetID+baseServerPort, 10)
 	client, err := rpc.Dial("tcp", "localhost:"+targetPort)
@@ -181,6 +192,122 @@ func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload
 	return nil
 }
 
+func Order(otherCache *cache.Cache) error {
+	for k, v := range otherCache.Data {
+		if myEntry, ok := sCache.Data[k]; ok {
+			if myEntry.Clock.Compare(&v.Clock) == vectorclock.GREATER {
+				sCache.Data[k] = v
+				debug(id, fmt.Sprintf("Update on order: %s:%s", k, v.Val))
+			}
+		} else {
+			debug(id, fmt.Sprintf("Insert on order: %s:%s", k, v.Val))
+			sCache.Data[k] = v
+		}
+	}
+	return nil
+}
+
+func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
+	var counter uint64
+	var err error
+
+	lockInTree.Lock()
+	defer lockInTree.Unlock()
+	if bIntree == true {
+		reply.IsChild = false
+		debug(id, fmt.Sprintf("%d is not parent. Returning", *arg))
+		return nil
+	}
+	bIntree = true
+	lockInTree.Unlock()
+
+	for _, server := range RPCclients {
+		go func(server *rpc.Client) {
+			var response StabilizePayload
+			err = server.Call("ServerService.Gather", &id, &response)
+			atomic.AddUint64(&counter, 1)
+
+			if err != nil {
+				debug(id, fmt.Sprintf("Error: %s", err.Error()))
+				return
+			}
+
+			if response.IsChild == true {
+				lockCache.Lock()
+				defer lockCache.Unlock()
+				Order(&response.Cache)
+				listChild = append(listChild, server)
+				lockCache.Unlock()
+				debug(id, fmt.Sprintf("Append to childList"))
+			}
+		}(server)
+
+	}
+
+	// Wait till all of other connected servers reply
+	for counter < uint64(len(RPCclients)) {
+
+	}
+
+	reply.IsChild = true
+	reply.Cache = *sCache
+
+	return nil
+}
+
+func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
+
+	var counter uint64
+
+	for _, server := range listChild {
+		go func(server *rpc.Client) {
+			var dummyReply int64
+			err := server.Call("ServerService.Scatter", arg, &dummyReply)
+			if err != nil {
+				debug(id, fmt.Sprintf("Scatter failed with %v", err))
+				return
+			}
+			atomic.AddUint64(&counter, 1)
+		}(server)
+	}
+
+	for counter < uint64(len(listChild)) {
+
+	}
+
+	Order(&arg.Cache)
+	*reply = 1
+
+	return nil
+}
+
+// InitStabilize starts the Stabilize algorithm. This server is the root of the MST
+func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
+	var response StabilizePayload
+	errGather := ss.Gather(&id, &response)
+	if errGather != nil {
+		debug(id, fmt.Sprintf("Gather failed with %v", errGather))
+		return errGather
+	}
+	response.Cache = *sCache
+	var dummyReply int64
+	errScatter := ss.Scatter(&response, &dummyReply)
+	if errScatter != nil {
+		debug(id, fmt.Sprintf("Scatter failed with %v", errScatter))
+		return errScatter
+	}
+
+	// Update the datastore
+	go func(){
+		for k,v := range sCache.Data {
+			data[k] = v
+		}
+		sCache.Invalidate()
+	}
+
+	return nil
+}
+
 /*******************************************************/
 
 func connectToServers() {
@@ -243,10 +370,13 @@ func Init() {
 	InitLogger()
 	debug(id, "Starting RPC server ...\n")
 
+	// Init vector clock id
 	vClock.Id = id
 
 	// Init cache
 	sCache = cache.New()
+
+	bIntree = false
 
 	// Register RPC server
 	//RPCserver = rpc.NewServer()

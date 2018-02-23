@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/rpc"
 	"os/exec"
 	"strconv"
@@ -269,8 +270,55 @@ func get(clientId int64, key string) {
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Printf("%s:%s\n", key, reply)
+		fmt.Printf("Client[%d]\t%s:%s\n", clientId, key, reply)
 	}
+}
+
+func stabilize() {
+	fmt.Printf("Stablizing ...\n")
+
+	server := getRandomServer()
+
+	if server == nil {
+		fmt.Printf("No connected servers to stabilize\n")
+		return
+	}
+
+	var arg, reply int64
+	err := server.Call("ServerService.InitStablize", &arg, &reply)
+
+	if err != nil {
+		fmt.Println("Server RPC for Stabilize failed")
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Succeeded stabilizing")
+	}
+
+}
+
+/* *******************Helper Functions******************/
+func getRandomServer() *rpc.Client {
+	length := len(servers)
+
+	if length == 0 {
+		return nil
+	}
+
+	// Get a random position in the server set
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	serverPos := r.Int63n(int64(length))
+	var server *rpc.Client
+	var i int64
+	// A bit complex to get a random server
+	for _, server = range servers {
+		if i == serverPos {
+			break
+		} else {
+			i++
+		}
+	}
+	fmt.Printf("Chosen server is %d", serverPos)
+	return server
 }
 
 func main() {
@@ -281,7 +329,7 @@ func main() {
 	joinServer(5)
 
 	joinClient(4, 2)
-	joinClient(6, 2)
+	joinClient(6, 5)
 	joinClient(7, 2)
 	//joinClient(7, 5)
 
