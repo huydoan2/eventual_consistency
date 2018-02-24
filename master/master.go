@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"os/exec"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -285,7 +286,7 @@ func stabilize() {
 	}
 
 	var arg, reply int64
-	err := server.Call("ServerService.InitStablize", &arg, &reply)
+	err := server.Call("ServerService.InitStabilize", &arg, &reply)
 
 	if err != nil {
 		fmt.Println("Server RPC for Stabilize failed")
@@ -293,6 +294,9 @@ func stabilize() {
 	} else {
 		fmt.Println("Succeeded stabilizing")
 	}
+
+	// Invalidate clients' caches
+	InvalidateClientCache()
 
 }
 
@@ -321,47 +325,90 @@ func getRandomServer() *rpc.Client {
 	return server
 }
 
+func InvalidateClientCache() {
+	var count uint64
+	for _, client := range clients {
+		go func(client *rpc.Client) {
+			var arg, reply int64
+			client.Call("ClientService.InvalidateCache", &arg, &reply)
+		}(client)
+		atomic.AddUint64(&count, 1)
+	}
+	for count < uint64(len(clients)) {
+
+	}
+}
+
 func main() {
+	joinServer(0)
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
-	//joinServer(4)
-	joinServer(5)
+	joinServer(4)
+	// defer killServer(0)
+	// defer killServer(1)
+	// defer killServer(2)
+	// defer killServer(3)
+	// defer killServer(4)
 
-	joinClient(4, 2)
-	joinClient(6, 5)
+	joinClient(5, 0)
+	joinClient(6, 1)
 	joinClient(7, 2)
-	//joinClient(7, 5)
+	joinClient(8, 3)
+	joinClient(9, 4)
 
-	// err := breakConnection(11, 5)
-	// if err != nil {
-	// 	fmt.Println(err.Error())
-	// }
+	const NUMKEYS int = 20
+	const NUMVALS int = 52
 
-	// breakConnection(2, 3)
+	cId := []int{5, 6, 7, 8, 9}
+	keys := make([]string, NUMKEYS)
+	values := make([]string, NUMVALS)
 
-	// err = createConnection(5, 11)
-	// if err != nil {
-	// 	fmt.Println(err.Error())
-	// }
+	// Initialize the test keys and values
+	for i := 0; i < NUMKEYS/2; i++ {
+		keys[i] = string('0' + i)
+		keys[i+10] = "1" + keys[i]
+	}
 
-	// createConnection(4, 1)
-	// createConnection(4, 2)
-	// createConnection(3, 4)
+	for i := 0; i < NUMVALS; i++ {
+		if i < 26 {
+			values[i] = string('a' + i)
+		} else {
+			values[i] = string('A' + i - 26)
+		}
+	}
 
-	put(4, "1", "a")
-	put(6, "1", "b")
-	put(7, "1", "c")
-	put(7, "1", "d")
+	// Each client in parallel puts random key:value pair
+	// var wg sync.WaitGroup
+	// wg.Add(5)
 
-	// printStore(1)
-	// printStore(2)
-	// printStore(3)
-	// printStore(5)
+	for _, id := range cId {
+		//go func(id int64) {
+		// defer wg.Done()
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		for i := 0; i < 5; i++ {
+			keyPos := r.Intn(NUMKEYS)
+			valPos := r.Intn(NUMVALS)
+			put(int64(id), keys[keyPos], values[valPos])
+		}
+		//}(int64(i))
+	}
 
-	get(4, "1")
-	get(7, "1")
-	get(6, "1")
+	// Synchronize all "put" threads
+	// wg.Wait()
+	printStore(0)
+	printStore(1)
+	printStore(2)
+	printStore(3)
+	printStore(4)
+
+	stabilize()
+
+	printStore(0)
+	printStore(1)
+	printStore(2)
+	printStore(3)
+	printStore(4)
 
 	for {
 

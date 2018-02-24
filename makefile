@@ -1,11 +1,13 @@
 ROOT = $(CURDIR)
+DEBUGBUILD = go build 
+#-gcflag=all="-N -l"
 
 .PHONY: all
 all: server client master
 
 .PHONY: server
 server: cache vectorclock
-	cd $(ROOT)/server;	go build
+	cd $(ROOT)/server; $(DEBUGBUILD)	
 	cd ..
 
 .PHONY: client

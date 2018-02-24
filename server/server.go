@@ -43,9 +43,12 @@ var listChild []*rpc.Client
 // ServerService : RPC type for server services
 type ServerService int //temporary type
 
+// StabilizePayload : RPC type for transporting cache data in Stabilize
 type StabilizePayload struct {
+	dummy   string
 	IsChild bool
-	Cache   cache.Cache
+	Data    map[string]cache.Value
+	// Cache   cache.Cache
 }
 
 // BreakConnection : RPC to break connection between servers
@@ -108,7 +111,7 @@ func (ss *ServerService) ConnectAsClient(targetID *int64, reply *int64) error {
 	return nil
 }
 
-// Cleanup: Function to cleanup before murder
+// Cleanup : Function to cleanup before murder
 func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
 	debug(id, "Cleaning up before being terminated...")
 
@@ -128,13 +131,14 @@ func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) err
 	debug(id, "Printing Store now")
 	for k, v := range data {
 		(*reply)[k] = v.Val
-		debug(id, fmt.Sprintf("%s: %s", k, (*reply)[k]))
+		debug(id, fmt.Sprintf("P %s: %s", k, (*reply)[k]))
 	}
 	//reply = &ret
 
 	return nil
 }
 
+// Put RPC to respond to a Put request from the client
 func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload) error {
 	debug(id, fmt.Sprintf("Starting put %s:%s ...", (*clientReq).Key, (*clientReq).Val))
 
@@ -164,12 +168,14 @@ func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload
 	}
 
 	if update == 1 {
+		sCache.Insert(clientReq)
 		debug(id, "Record updated")
 	}
 
 	return nil
 }
 
+// Get RPC respond to Get request from the client
 func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload) error {
 	debug(id, "Starting get...")
 
@@ -192,8 +198,9 @@ func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload
 	return nil
 }
 
-func Order(otherCache *cache.Cache) error {
-	for k, v := range otherCache.Data {
+func Order(otherData *map[string]cache.Value) error {
+	debug(id, "Ordering ...")
+	for k, v := range *otherData {
 		if myEntry, ok := sCache.Data[k]; ok {
 			if myEntry.Clock.Compare(&v.Clock) == vectorclock.GREATER {
 				sCache.Data[k] = v
@@ -207,12 +214,11 @@ func Order(otherCache *cache.Cache) error {
 	return nil
 }
 
+// Gather RPC converge cast, form MST, gather cache data to the root node
 func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
-	var counter uint64
-	var err error
+	//var err error
 
 	lockInTree.Lock()
-	defer lockInTree.Unlock()
 	if bIntree == true {
 		reply.IsChild = false
 		debug(id, fmt.Sprintf("%d is not parent. Returning", *arg))
@@ -221,21 +227,41 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	bIntree = true
 	lockInTree.Unlock()
 
-	for _, server := range RPCclients {
+	var wg sync.WaitGroup
+	wg.Add(len(RPCclients))
+
+	debug(id, fmt.Sprintf("Gathering... called by Server[%d]", *arg))
+	for server_id, server := range RPCclients {
+		if server_id == id {
+			continue
+		}
 		go func(server *rpc.Client) {
+			//var err error
+			defer wg.Done()
 			var response StabilizePayload
-			err = server.Call("ServerService.Gather", &id, &response)
-			atomic.AddUint64(&counter, 1)
+			response.dummy = "DUMMY"
+			response.Data = make(map[string]cache.Value)
+			response.IsChild = false
+
+			err := server.Call("ServerService.Gather", &id, &response)
+			//atomic.AddUint64(&counter, 1)
+
+			debug(id, fmt.Sprintf("respond: %t", response.IsChild))
 
 			if err != nil {
 				debug(id, fmt.Sprintf("Error: %s", err.Error()))
-				return
+				//return
 			}
 
 			if response.IsChild == true {
+				debug(id, "Returned from Gather ...")
+				for k, v := range response.Data {
+					debug(id, fmt.Sprintf("%s: %s", k, v.Val))
+				}
+
 				lockCache.Lock()
 				defer lockCache.Unlock()
-				Order(&response.Cache)
+				Order(&response.Data)
 				listChild = append(listChild, server)
 				lockCache.Unlock()
 				debug(id, fmt.Sprintf("Append to childList"))
@@ -245,15 +271,94 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	}
 
 	// Wait till all of other connected servers reply
-	for counter < uint64(len(RPCclients)) {
+	wg.Wait()
 
+	debug(id, "Copying cache ...")
+	reply.IsChild = true
+	reply.Data = sCache.Data
+	debug(id, "Finished Copying ...")
+
+	debug(id, "Now printing cache ...")
+	for k, v := range sCache.Data {
+		debug(id, fmt.Sprintf("Cache %s: %s", k, v.Val))
 	}
 
-	reply.IsChild = true
-	reply.Cache = *sCache
-
+	debug(id, "Now printing reply ...")
+	for k, v := range reply.Data {
+		debug(id, fmt.Sprintf("Reply %s: %s", k, v.Val))
+	}
 	return nil
 }
+
+// func (ss *ServerService) Gather(arg *int64, bool *isChild) error {
+// 	var counter uint64
+// 	var err error
+
+// 	lockInTree.Lock()
+// 	defer lockInTree.Unlock()
+// 	if bIntree == true {
+// 		reply.IsChild = false
+// 		//debug(id, fmt.Sprintf("%d is not parent. Returning", *arg))
+// 		return nil
+// 	}
+// 	bIntree = true
+// 	lockInTree.Unlock()
+
+// 	debug(id, fmt.Sprintf("Gathering... called by Server[%d]", *arg))
+// 	for _, server := range RPCclients {
+// 		go func(server *rpc.Client) {
+// 			//var response StabilizePayload
+// 			//response.Cache.Data = make(map[string]cache.Value)
+// 			//response.IsChild = false
+
+// 			err = server.Call("ServerService.Gather", &id, &response)
+// 			atomic.AddUint64(&counter, 1)
+
+// 			debug(id, fmt.Sprintf("respond: %t", response.IsChild))
+
+// 			if err != nil {
+// 				debug(id, fmt.Sprintf("Error: %s", err.Error()))
+// 				return
+// 			}
+
+// 			if response.IsChild == true {
+// 				debug(id, "Returned from Gather ...")
+// 				for k, v := range response.Cache.Data {
+// 					debug(id, fmt.Sprintf("%s: %s", k, v.Val))
+// 				}
+
+// 				lockCache.Lock()
+// 				defer lockCache.Unlock()
+// 				Order(&response.Cache)
+// 				listChild = append(listChild, server)
+// 				lockCache.Unlock()
+// 				debug(id, fmt.Sprintf("Append to childList"))
+// 			}
+// 		}(server)
+
+// 	}
+
+// 	// Wait till all of other connected servers reply
+// 	for counter < uint64(len(RPCclients)) {
+
+// 	}
+
+// 	debug(id, "Copying cache ...")
+// 	reply.IsChild = true
+// 	reply.Cache.Data = sCache.Data
+// 	debug(id, "Finished Copying ...")
+
+// 	debug(id, "Now printing cache ...")
+// 	for k, v := range sCache.Data {
+// 		debug(id, fmt.Sprintf("%s: %s", k, v.Val))
+// 	}
+
+// 	debug(id, "Now printing reply ...")
+// 	for k, v := range reply.Cache.Data {
+// 		debug(id, fmt.Sprintf("%s: %s", k, v.Val))
+// 	}
+// 	return nil
+// }
 
 func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
@@ -275,7 +380,7 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 	}
 
-	Order(&arg.Cache)
+	Order(&arg.Data)
 	*reply = 1
 
 	return nil
@@ -283,13 +388,15 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 // InitStabilize starts the Stabilize algorithm. This server is the root of the MST
 func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
+	debug(id, "Start stabilizing as root")
 	var response StabilizePayload
+	//bIntree = true
 	errGather := ss.Gather(&id, &response)
 	if errGather != nil {
 		debug(id, fmt.Sprintf("Gather failed with %v", errGather))
 		return errGather
 	}
-	response.Cache = *sCache
+	response.Data = sCache.Data
 	var dummyReply int64
 	errScatter := ss.Scatter(&response, &dummyReply)
 	if errScatter != nil {
@@ -298,12 +405,12 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 	}
 
 	// Update the datastore
-	go func(){
-		for k,v := range sCache.Data {
+	go func() {
+		for k, v := range sCache.Data {
 			data[k] = v
 		}
 		sCache.Invalidate()
-	}
+	}()
 
 	return nil
 }
@@ -361,7 +468,11 @@ func InitLogger() {
 	// log.SetOutput(f)
 }
 
+var lockDebug sync.Mutex
+
 func debug(id int64, msg string) {
+	lockDebug.Lock()
+	defer lockDebug.Unlock()
 	logger.Printf("Server[%d]: %s", id, msg)
 }
 

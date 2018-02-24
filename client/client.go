@@ -174,6 +174,12 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 	return nil
 }
 
+// InvalidateCache RPC to invalidate client's cache. Used for testing
+func (cs *ClientService) InvalidateCache(arg *int64, reply *int64) error {
+	cCache.Invalidate()
+	return nil
+}
+
 /*******************************************************/
 
 var logger *log.Logger
