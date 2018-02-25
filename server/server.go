@@ -9,10 +9,9 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
-	"github.com/huydoan2/eventual_consistency/cache"
-	"github.com/huydoan2/eventual_consistency/vectorclock"
+	"../cache"
+	"../vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -198,17 +197,28 @@ func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload
 	return nil
 }
 
-func Order(otherData *map[string]cache.Value) error {
+func Order(otherData *map[string]cache.Value, updateData bool) error {
 	debug(id, "Ordering ...")
 	for k, v := range *otherData {
+		debug(id, fmt.Sprintf("Entry is %s: %s, %s", k, v.Val, v.Clock.ToString()))
 		if myEntry, ok := sCache.Data[k]; ok {
+			debug(id, fmt.Sprintf("Compare myEntry: %s, %s and newEntry: %s, %s", myEntry.Val, myEntry.Clock.ToString(), v.Val, v.Clock.ToString()))
 			if myEntry.Clock.Compare(&v.Clock) == vectorclock.GREATER {
+				debug(id, "newEntry is Greater and will update")
 				sCache.Data[k] = v
-				debug(id, fmt.Sprintf("Update on order: %s:%s", k, v.Val))
+				debug(id, fmt.Sprintf("Update Cache on order: %s:%s", k, v.Val))
+				if updateData{
+					data[k] = v
+					debug(id, fmt.Sprintf("Update DataStore on order: %s:%s", k, v.Val))
+				}
 			}
 		} else {
-			debug(id, fmt.Sprintf("Insert on order: %s:%s", k, v.Val))
+			debug(id, fmt.Sprintf("Insert Cache on order: %s:%s", k, v.Val))
 			sCache.Data[k] = v
+			if updateData{
+				data[k] = v
+				debug(id, fmt.Sprintf("Insert DataStore on order: %s:%s", k, v.Val))
+			}
 		}
 	}
 	return nil
@@ -217,66 +227,75 @@ func Order(otherData *map[string]cache.Value) error {
 // Gather RPC converge cast, form MST, gather cache data to the root node
 func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	//var err error
+	// var lockCounter sync.Mutex
 
 	lockInTree.Lock()
+	debug(id, fmt.Sprintf("%d is checking if it is parent", *arg))
 	if bIntree == true {
 		reply.IsChild = false
 		debug(id, fmt.Sprintf("%d is not parent. Returning", *arg))
+		lockInTree.Unlock()
 		return nil
 	}
 	bIntree = true
 	lockInTree.Unlock()
 
 	var wg sync.WaitGroup
-	wg.Add(len(RPCclients))
 
 	debug(id, fmt.Sprintf("Gathering... called by Server[%d]", *arg))
+	debug(id, fmt.Sprintf("Now call gather on %d servers", len(RPCclients)))
 	for server_id, server := range RPCclients {
-		if server_id == id {
+		if server_id == *arg {
 			continue
 		}
-		go func(server *rpc.Client) {
-			//var err error
+		wg.Add(1)
+		go func(server *rpc.Client, server_id int64, wg *sync.WaitGroup) {
+
 			defer wg.Done()
 			var response StabilizePayload
 			response.dummy = "DUMMY"
 			response.Data = make(map[string]cache.Value)
 			response.IsChild = false
 
+			debug(id, fmt.Sprintf("Calling gather from %d on %d", *arg, server_id))
 			err := server.Call("ServerService.Gather", &id, &response)
-			//atomic.AddUint64(&counter, 1)
 
+			debug(id, fmt.Sprintf("Returned from Gather on %d", server_id))
+			for k, v := range response.Data {
+				debug(id, fmt.Sprintf("%s: %s", k, v.Val))
+			}
 			debug(id, fmt.Sprintf("respond: %t", response.IsChild))
 
 			if err != nil {
 				debug(id, fmt.Sprintf("Error: %s", err.Error()))
-				//return
+				return
 			}
 
 			if response.IsChild == true {
-				debug(id, "Returned from Gather ...")
-				for k, v := range response.Data {
-					debug(id, fmt.Sprintf("%s: %s", k, v.Val))
-				}
-
 				lockCache.Lock()
 				defer lockCache.Unlock()
-				Order(&response.Data)
+				Order(&response.Data, false)
 				listChild = append(listChild, server)
-				lockCache.Unlock()
+				//lockCache.Unlock()
 				debug(id, fmt.Sprintf("Append to childList"))
 			}
-		}(server)
+
+			debug(id, fmt.Sprintf("Leaving goroutine for gather on %d", server_id))
+			
+			return
+		}(server, server_id, &wg)
 
 	}
 
 	// Wait till all of other connected servers reply
+	debug(id, "Waiting to sync threads")
 	wg.Wait()
 
 	debug(id, "Copying cache ...")
 	reply.IsChild = true
 	reply.Data = sCache.Data
-	debug(id, "Finished Copying ...")
+	//reply.Data = make(map[string]cache.Val)
+	//debug(id, fmt.Sprintf("Finished Copying and size of cache is %d ...", len(sCache.Data)))
 
 	debug(id, "Now printing cache ...")
 	for k, v := range sCache.Data {
@@ -290,97 +309,27 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	return nil
 }
 
-// func (ss *ServerService) Gather(arg *int64, bool *isChild) error {
-// 	var counter uint64
-// 	var err error
-
-// 	lockInTree.Lock()
-// 	defer lockInTree.Unlock()
-// 	if bIntree == true {
-// 		reply.IsChild = false
-// 		//debug(id, fmt.Sprintf("%d is not parent. Returning", *arg))
-// 		return nil
-// 	}
-// 	bIntree = true
-// 	lockInTree.Unlock()
-
-// 	debug(id, fmt.Sprintf("Gathering... called by Server[%d]", *arg))
-// 	for _, server := range RPCclients {
-// 		go func(server *rpc.Client) {
-// 			//var response StabilizePayload
-// 			//response.Cache.Data = make(map[string]cache.Value)
-// 			//response.IsChild = false
-
-// 			err = server.Call("ServerService.Gather", &id, &response)
-// 			atomic.AddUint64(&counter, 1)
-
-// 			debug(id, fmt.Sprintf("respond: %t", response.IsChild))
-
-// 			if err != nil {
-// 				debug(id, fmt.Sprintf("Error: %s", err.Error()))
-// 				return
-// 			}
-
-// 			if response.IsChild == true {
-// 				debug(id, "Returned from Gather ...")
-// 				for k, v := range response.Cache.Data {
-// 					debug(id, fmt.Sprintf("%s: %s", k, v.Val))
-// 				}
-
-// 				lockCache.Lock()
-// 				defer lockCache.Unlock()
-// 				Order(&response.Cache)
-// 				listChild = append(listChild, server)
-// 				lockCache.Unlock()
-// 				debug(id, fmt.Sprintf("Append to childList"))
-// 			}
-// 		}(server)
-
-// 	}
-
-// 	// Wait till all of other connected servers reply
-// 	for counter < uint64(len(RPCclients)) {
-
-// 	}
-
-// 	debug(id, "Copying cache ...")
-// 	reply.IsChild = true
-// 	reply.Cache.Data = sCache.Data
-// 	debug(id, "Finished Copying ...")
-
-// 	debug(id, "Now printing cache ...")
-// 	for k, v := range sCache.Data {
-// 		debug(id, fmt.Sprintf("%s: %s", k, v.Val))
-// 	}
-
-// 	debug(id, "Now printing reply ...")
-// 	for k, v := range reply.Cache.Data {
-// 		debug(id, fmt.Sprintf("%s: %s", k, v.Val))
-// 	}
-// 	return nil
-// }
-
 func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
-	var counter uint64
+	var wg sync.WaitGroup
 
-	for _, server := range listChild {
-		go func(server *rpc.Client) {
+	for server_id, server := range listChild {
+		wg.Add(1)
+		go func(server *rpc.Client, server_id int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			debug(id, fmt.Sprintf("Scatter to %d from %d", server_id, arg))
 			var dummyReply int64
 			err := server.Call("ServerService.Scatter", arg, &dummyReply)
 			if err != nil {
 				debug(id, fmt.Sprintf("Scatter failed with %v", err))
 				return
 			}
-			atomic.AddUint64(&counter, 1)
-		}(server)
+		}(server, server_id, &wg)
 	}
 
-	for counter < uint64(len(listChild)) {
+	wg.Wait()
 
-	}
-
-	Order(&arg.Data)
+	Order(&arg.Data, true)
 	*reply = 1
 
 	return nil
@@ -390,15 +339,22 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 	debug(id, "Start stabilizing as root")
 	var response StabilizePayload
+	response.dummy = "DUMMY"
+	response.Data = make(map[string]cache.Value)
+	response.IsChild = false
 	//bIntree = true
+	debug(id, "Beginning gather ...")
 	errGather := ss.Gather(&id, &response)
+	debug(id, "Gather complete ...")
 	if errGather != nil {
 		debug(id, fmt.Sprintf("Gather failed with %v", errGather))
 		return errGather
 	}
 	response.Data = sCache.Data
 	var dummyReply int64
+	debug(id, "Beginning scatter ...")
 	errScatter := ss.Scatter(&response, &dummyReply)
+	debug(id, "Scatter complete ...")
 	if errScatter != nil {
 		debug(id, fmt.Sprintf("Scatter failed with %v", errScatter))
 		return errScatter
@@ -409,7 +365,7 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 		for k, v := range sCache.Data {
 			data[k] = v
 		}
-		sCache.Invalidate()
+		//sCache.Invalidate()
 	}()
 
 	return nil
@@ -468,11 +424,11 @@ func InitLogger() {
 	// log.SetOutput(f)
 }
 
-var lockDebug sync.Mutex
+//var lockDebug sync.Mutex
 
 func debug(id int64, msg string) {
-	lockDebug.Lock()
-	defer lockDebug.Unlock()
+	//lockDebug.Lock()
+	//defer lockDebug.Unlock()
 	logger.Printf("Server[%d]: %s", id, msg)
 }
 

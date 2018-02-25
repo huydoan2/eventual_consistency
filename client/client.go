@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/huydoan2/eventual_consistency/cache"
-	"github.com/huydoan2/eventual_consistency/vectorclock"
+	"../cache"
+	"../vectorclock"
 )
 
 const masterPort int64 = 3000
