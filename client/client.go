@@ -98,6 +98,7 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 	data.Key = putData.Key
 	data.Val = putData.Value
 	vClock.Increment(id)
+	data.ValTime = vClock
 	data.Clock = vClock
 
 	// cache the put request

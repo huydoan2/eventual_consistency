@@ -346,7 +346,7 @@ func main() {
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
-	// joinServer(4)
+	joinServer(4)
 	// defer killServer(0)
 	// defer killServer(1)
 	// defer killServer(2)
@@ -357,56 +357,58 @@ func main() {
 	joinClient(6, 1)
 	joinClient(7, 2)
 	joinClient(8, 3)
-	// joinClient(9, 4)
+	joinClient(9, 4)
 
-	// const NUMKEYS int = 20
-	// const NUMVALS int = 52
+	const NUMKEYS int = 20
+	const NUMVALS int = 52
 
-	// cId := []int{5, 6, 7, 8, 9}
-	// keys := make([]string, NUMKEYS)
-	// values := make([]string, NUMVALS)
+	cId := []int{5, 6, 7, 8, 9}
+	keys := make([]string, NUMKEYS)
+	values := make([]string, NUMVALS)
 
-	// // Initialize the test keys and values
-	// for i := 0; i < NUMKEYS/2; i++ {
-	// 	keys[i] = string('0' + i)
-	// 	keys[i+10] = "1" + keys[i]
-	// }
+	// Initialize the test keys and values
+	for i := 0; i < NUMKEYS/2; i++ {
+		keys[i] = string('0' + i)
+		keys[i+10] = "1" + keys[i]
+	}
 
-	// for i := 0; i < NUMVALS; i++ {
-	// 	if i < 26 {
-	// 		values[i] = string('a' + i)
-	// 	} else {
-	// 		values[i] = string('A' + i - 26)
-	// 	}
-	// }
+	for i := 0; i < NUMVALS; i++ {
+		if i < 26 {
+			values[i] = string('a' + i)
+		} else {
+			values[i] = string('A' + i - 26)
+		}
+	}
 
 	// Each client in parallel puts random key:value pair
 	// var wg sync.WaitGroup
 	// wg.Add(5)
 
-	// for _, id := range cId {
-	// 	//go func(id int64) {
-	// 	// defer wg.Done()
-	// 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	// 	for i := 0; i < 5; i++ {
-	// 		keyPos := r.Intn(NUMKEYS)
-	// 		valPos := r.Intn(NUMVALS)
-	// 		put(int64(id), keys[keyPos], values[valPos])
-	// 	}
-	// 	//}(int64(i))
-	// }
+	for _, id := range cId {
+		//go func(id int64) {
+		// defer wg.Done()
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		for i := 0; i < 5; i++ {
+			keyPos := r.Intn(NUMKEYS)
+			valPos := r.Intn(NUMVALS)
+			put(int64(id), keys[keyPos], values[valPos])
+		}
+		//}(int64(i))
+	}
 
-	put(5, "1", "a")
-	put(5, "2", "b")
-	put(6, "1", "c")
-	put(6, "3", "d")
+	// put(5, "1", "a")
+	// put(5, "2", "b")
+	// put(6, "1", "c")
+	// put(6, "3", "d")
+
 	// Synchronize all "put" threads
 	// wg.Wait()
+
 	printStore(0)
 	printStore(1)
 	printStore(2)
 	printStore(3)
-	// printStore(4)
+	printStore(4)
 
 	stabilize()
 
@@ -414,7 +416,7 @@ func main() {
 	printStore(1)
 	printStore(2)
 	printStore(3)
-	// printStore(4)
+	printStore(4)
 
 	for {
 

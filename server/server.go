@@ -146,11 +146,11 @@ func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload
 	serverResp.Clock = vClock
 	update := 0
 
+	debug(id, fmt.Sprintf("Client Clock: %s", clientReq.Clock.ToString()))
 	val, ok := data[clientReq.Key]
 	if ok {
 		currClock := val.Clock
 		cmp := currClock.Compare(&clientReq.Clock)
-		debug(id, fmt.Sprintf("Client Clock: %s", clientReq.Clock.ToString()))
 		debug(id, fmt.Sprintf("Current Clock: %s", currClock.ToString()))
 		if cmp == vectorclock.LESS {
 			data[clientReq.Key] = cache.Value{Val: clientReq.Val, Clock: clientReq.Clock}
@@ -169,6 +169,9 @@ func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload
 	if update == 1 {
 		sCache.Insert(clientReq)
 		debug(id, "Record updated")
+		temp := sCache.Data[clientReq.Key].Clock
+
+		debug(id, fmt.Sprintf("sCache Clock: %s", temp.ToString()))
 	}
 
 	return nil
@@ -197,6 +200,7 @@ func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload
 	return nil
 }
 
+// Order : update sCache only when updateData is false, otherwise update both sCache and the DataStore
 func Order(otherData *map[string]cache.Value, updateData bool) error {
 	debug(id, "Ordering ...")
 	for k, v := range *otherData {
@@ -207,18 +211,17 @@ func Order(otherData *map[string]cache.Value, updateData bool) error {
 				debug(id, "newEntry is Greater and will update")
 				sCache.Data[k] = v
 				debug(id, fmt.Sprintf("Update Cache on order: %s:%s", k, v.Val))
-				if updateData{
-					data[k] = v
-					debug(id, fmt.Sprintf("Update DataStore on order: %s:%s", k, v.Val))
-				}
+
 			}
 		} else {
 			debug(id, fmt.Sprintf("Insert Cache on order: %s:%s", k, v.Val))
 			sCache.Data[k] = v
-			if updateData{
-				data[k] = v
-				debug(id, fmt.Sprintf("Insert DataStore on order: %s:%s", k, v.Val))
-			}
+		}
+	}
+	if updateData {
+		for k, v := range sCache.Data {
+			data[k] = v
+			debug(id, fmt.Sprintf("Update DataStore on order: %s:%s", k, v.Val))
 		}
 	}
 	return nil
@@ -281,7 +284,7 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 			}
 
 			debug(id, fmt.Sprintf("Leaving goroutine for gather on %d", server_id))
-			
+
 			return
 		}(server, server_id, &wg)
 
