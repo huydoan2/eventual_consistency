@@ -7,7 +7,7 @@ all: server client master
 
 .PHONY: server
 server: cache vectorclock
-	cd $(ROOT)/server; $(DEBUGBUILD)	
+	cd $(ROOT)/server; go build	
 	cd ..
 
 .PHONY: client

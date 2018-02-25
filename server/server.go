@@ -186,6 +186,8 @@ func (ss *ServerService) Get(clientReq *cache.Payload, serverResp *cache.Payload
 	vClock.Increment(id)
 	serverResp.Clock = vClock
 
+	// Probably want to check the sCache first. Remember to update the sCache if query from the DataStore
+
 	// Check if it exists in data. If not return ERR_KEY
 	val, ok := data[clientReq.Key]
 	if ok {
@@ -333,6 +335,7 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 	wg.Wait()
 
 	Order(&arg.Data, true)
+	sCache.Invalidate()
 	*reply = 1
 
 	return nil
@@ -363,13 +366,13 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 		return errScatter
 	}
 
-	// Update the datastore
-	go func() {
-		for k, v := range sCache.Data {
-			data[k] = v
-		}
-		//sCache.Invalidate()
-	}()
+	// // Update the datastore
+	// go func() {
+	// 	for k, v := range sCache.Data {
+	// 		data[k] = v
+	// 	}
+	// 	//sCache.Invalidate()
+	// }()
 
 	return nil
 }

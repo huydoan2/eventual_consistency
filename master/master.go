@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net/rpc"
+	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -49,7 +52,7 @@ func ExecClient(clientId, serverId int64) {
 func joinServer(id int64) {
 	const maxCount = 100
 	count := 0
-	fmt.Println("Join Server")
+	fmt.Printf("Join Server[%d]\n", id)
 	// 1. Check if server or client already, then print error and exit
 	// 2. Else continue
 
@@ -82,7 +85,7 @@ func joinServer(id int64) {
 func joinClient(clientId, serverID int64) {
 	const maxCount = 100
 	count := 0
-	fmt.Println("Join Client")
+	fmt.Printf("Join Client[%d]-Server[%d]\n", clientId, serverID)
 
 	_, okServer := servers[clientId]
 	_, okClient := clients[clientId]
@@ -341,7 +344,11 @@ func InvalidateClientCache() {
 	}
 }
 
-func main() {
+func PrintUsage() {
+
+}
+
+func AutomaticTest() {
 	joinServer(0)
 	joinServer(1)
 	joinServer(2)
@@ -417,9 +424,176 @@ func main() {
 	printStore(2)
 	printStore(3)
 	printStore(4)
+}
 
-	for {
+func main() {
+	//AutomaticTest()
+
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Println("Enter commands:")
+
+	for scanner.Scan() {
+		fmt.Print("> ")
+		line := scanner.Text()
+		elements := strings.Split(line, " ")
+
+		// fmt.Printf("Read: %s\n", line)
+		// fmt.Print("Args: ")
+		// for i := 0; i < len(elements)-1; i++ {
+		// 	fmt.Printf("**%s", elements[i])
+		// }
+		// fmt.Printf("**%s**\n", elements[len(elements)-1])
+
+		// Skip empty line
+		if len(elements) == 0 {
+			continue
+		}
+
+		var id1, id2 int64
+		var err error
+
+		switch elements[0] {
+		case "joinServer":
+			if len(elements) < 2 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			joinServer(id1)
+
+		case "killServer":
+			if len(elements) < 2 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			killServer(id1)
+
+		case "joinClient":
+			if len(elements) < 3 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			id2, err = strconv.ParseInt(elements[2], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			joinClient(id1, id2)
+
+		case "breakConnection":
+			if len(elements) < 3 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			id2, err = strconv.ParseInt(elements[2], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			breakConnection(id1, id2)
+
+		case "createConnection":
+			if len(elements) < 3 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			id2, err = strconv.ParseInt(elements[2], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			createConnection(id1, id2)
+
+		case "stabilize":
+			stabilize()
+
+		case "printStore":
+			if len(elements) < 2 {
+				goto InvalidInput
+			}
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			printStore(id1)
+
+		case "put":
+			if len(elements) < 4 {
+				goto InvalidInput
+			}
+
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			put(id1, elements[2], elements[3])
+
+		case "get":
+			if len(elements) < 3 {
+				goto InvalidInput
+			}
+
+			id1, err = strconv.ParseInt(elements[1], 10, 64)
+
+			if err != nil {
+				fmt.Printf("Can't parse %s to integer\n", elements[1])
+				goto InvalidInput
+			}
+
+			get(id1, elements[2])
+
+		default:
+			goto InvalidInput
+		}
+		fmt.Println("################################################")
+		continue
+
+	InvalidInput:
+		PrintUsage()
 
 	}
+
+	return
 
 }

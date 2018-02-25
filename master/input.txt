@@ -1,0 +1,49 @@
+joinServer 0
+joinServer 1
+joinServer 2
+joinServer 3
+joinServer 4
+
+joinClient 5 0
+joinClient 6 1
+joinClient 7 2
+joinClient 8 3
+joinClient 9 4
+
+put 5 19 V
+put 5 11 z
+put 5 8 b
+put 5 1 z
+put 5 17 I
+
+put 6 17 P
+put 6 17 M
+put 6 16 b
+put 6 15 r
+put 6 17 i
+
+put 7 9 q
+put 7 2 N
+put 7 4 P
+put 7 13 z
+put 7 0 f
+
+put 8 5 J
+put 8 2 w
+put 8 13 P
+put 8 11 Z
+put 8 8 O
+
+put 9 6 J
+put 9 9 g
+put 9 5 N
+put 9 4 f
+put 9 7 c
+
+stabilize
+
+printStore 0
+printStore 1
+printStore 2
+printStore 3
+printStore 4
