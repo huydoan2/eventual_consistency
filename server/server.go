@@ -303,7 +303,7 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 				debug(id, fmt.Sprintf("Adding %d to childList", server_id))
 				// reply.ChildList[1] = true
 				reply.ChildList[server_id] = true
-				for k, _ := range response.ChildList {
+				for k := range response.ChildList {
 					reply.ChildList[k] = true
 
 				}
@@ -347,18 +347,19 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 	var wg sync.WaitGroup
 
-	for server_id, server := range listChild {
-		wg.Add(1)
-		go func(server *rpc.Client, server_id int, wg *sync.WaitGroup) {
+	wg.Add(len(listChild))
+
+	for serverID, server := range listChild {
+		go func(server *rpc.Client, serverID int) {
 			defer wg.Done()
-			debug(id, fmt.Sprintf("Scatter to %d from %d", server_id, arg))
+			// debug(id, fmt.Sprintf("Scatter to %d from %d", server_id, arg))
 			var dummyReply int64
 			err := server.Call("ServerService.Scatter", arg, &dummyReply)
 			if err != nil {
-				debug(id, fmt.Sprintf("Scatter failed with %v", err))
+				// debug(id, fmt.Sprintf("Scatter failed with %v", err))
 				return
 			}
-		}(server, server_id, &wg)
+		}(server, serverID)
 	}
 
 	wg.Wait()
