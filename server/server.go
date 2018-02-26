@@ -34,6 +34,7 @@ var lockInTree sync.Mutex
 var bIntree bool
 var lockCache sync.Mutex
 var listChild []*rpc.Client
+var versionNumber int64
 
 /*
 	RPC
@@ -44,10 +45,19 @@ type ServerService int //temporary type
 
 // StabilizePayload : RPC type for transporting cache data in Stabilize
 type StabilizePayload struct {
-	dummy   string
-	IsChild bool
-	Data    map[string]cache.Value
-	// Cache   cache.Cache
+	dummy     string
+	IsChild   bool
+	Data      map[string]cache.Value
+	ChildList map[int64]bool
+	Clock     vectorclock.VectorClock
+}
+
+// GetVersionNumber : RPC to get the version number of the server
+//					: Reply with versionNumber
+func (ss *ServerService) GetVersionNumber(serverID *int64, serverVersion *int64) error {
+	debug(id, "Checking server version number... ")
+	*serverVersion = versionNumber
+	return nil
 }
 
 // BreakConnection : RPC to break connection between servers
@@ -119,6 +129,7 @@ func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
 		delete(RPCclients, k)
 	}
 	debug(id, "Cleanup complete. Prepare to die")
+	logFileHandler.Close()
 	return nil
 }
 
@@ -249,6 +260,9 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 
 	debug(id, fmt.Sprintf("Gathering... called by Server[%d]", *arg))
 	debug(id, fmt.Sprintf("Now call gather on %d servers", len(RPCclients)))
+
+	reply.ChildList = make(map[int64]bool)
+
 	for server_id, server := range RPCclients {
 		if server_id == *arg {
 			continue
@@ -260,7 +274,9 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 			var response StabilizePayload
 			response.dummy = "DUMMY"
 			response.Data = make(map[string]cache.Value)
+			response.ChildList = make(map[int64]bool)
 			response.IsChild = false
+			response.Clock = vClock
 
 			debug(id, fmt.Sprintf("Calling gather from %d on %d", *arg, server_id))
 			err := server.Call("ServerService.Gather", &id, &response)
@@ -279,8 +295,19 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 			if response.IsChild == true {
 				lockCache.Lock()
 				defer lockCache.Unlock()
+				vClock.Update(&response.Clock)
 				Order(&response.Data, false)
 				listChild = append(listChild, server)
+
+				// reply.ChildList = make(map[string]bool)
+				debug(id, fmt.Sprintf("Adding %d to childList", server_id))
+				// reply.ChildList[1] = true
+				reply.ChildList[server_id] = true
+				for k, _ := range response.ChildList {
+					reply.ChildList[k] = true
+
+				}
+
 				//lockCache.Unlock()
 				debug(id, fmt.Sprintf("Append to childList"))
 			}
@@ -299,6 +326,7 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	debug(id, "Copying cache ...")
 	reply.IsChild = true
 	reply.Data = sCache.Data
+	reply.Clock = vClock
 	//reply.Data = make(map[string]cache.Val)
 	//debug(id, fmt.Sprintf("Finished Copying and size of cache is %d ...", len(sCache.Data)))
 
@@ -314,6 +342,7 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 	return nil
 }
 
+// Scatter : RPC broadcast data in cache and time
 func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 	var wg sync.WaitGroup
@@ -334,19 +363,24 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 	wg.Wait()
 
+	vClock.Update(&arg.Clock)
+	debug(id, fmt.Sprintf("Synced server time: %s", vClock.ToString()))
 	Order(&arg.Data, true)
 	sCache.Invalidate()
 	*reply = 1
+
+	versionNumber++
 
 	return nil
 }
 
 // InitStabilize starts the Stabilize algorithm. This server is the root of the MST
-func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
+func (ss *ServerService) InitStabilize(arg *int64, reply *map[int64]bool) error {
 	debug(id, "Start stabilizing as root")
 	var response StabilizePayload
 	response.dummy = "DUMMY"
 	response.Data = make(map[string]cache.Value)
+	response.ChildList = make(map[int64]bool)
 	response.IsChild = false
 	//bIntree = true
 	debug(id, "Beginning gather ...")
@@ -356,7 +390,12 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 		debug(id, fmt.Sprintf("Gather failed with %v", errGather))
 		return errGather
 	}
+
+	*reply = response.ChildList
+	(*reply)[id] = true
+
 	response.Data = sCache.Data
+	response.Clock = vClock
 	var dummyReply int64
 	debug(id, "Beginning scatter ...")
 	errScatter := ss.Scatter(&response, &dummyReply)
@@ -379,20 +418,20 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *int64) error {
 
 /*******************************************************/
 
-func connectToServers() {
+func connectToServers(serverList []int64) {
 	debug(id, "Connecting to other available servers ...")
 
 	var count int64
-	for i := int64(0); i < serverPortRange; i++ {
-		if i == id {
+	for _, serverId := range serverList {
+		if serverId == id {
 			continue
 		}
-		targetPort := strconv.FormatInt(i+baseServerPort, 10)
+		targetPort := strconv.FormatInt(serverId+baseServerPort, 10)
 		client, err := rpc.Dial("tcp", "localhost:"+targetPort)
 		if err == nil {
 			// Succesffuly connected
 			debug(id, "Connected to "+targetPort)
-			RPCclients[i] = client // store the client handler
+			RPCclients[serverId] = client // store the client handler
 			// now call the rpc of the target server to connect to me
 			var reply int64
 			err = client.Call("ServerService.ConnectAsClient", &id, &reply)
@@ -418,15 +457,17 @@ func CreateLogDir(dir string) {
 	}
 }
 
+var logFileHandler *os.File
+
 func InitLogger() {
 	//CreateLogDir("../log")
 
-	f, err := os.OpenFile("../log/server"+idStr, os.O_RDWR|os.O_CREATE, 0666)
+	logFileHandler, err := os.OpenFile("../log/server"+idStr, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
 	//defer f.Close()
-	logger = log.New(f, "", 0)
+	logger = log.New(logFileHandler, "", 0)
 	// log.SetOutput(f)
 }
 
@@ -438,10 +479,13 @@ func debug(id int64, msg string) {
 	logger.Printf("Server[%d]: %s", id, msg)
 }
 
-func Init() {
+func Init(serverList []int64) {
 
 	InitLogger()
 	debug(id, "Starting RPC server ...\n")
+
+	// Initialize version Number
+	versionNumber = 0
 
 	// Init vector clock id
 	vClock.Id = id
@@ -467,7 +511,7 @@ func Init() {
 	go rpc.Accept(RPCserverConn)
 
 	// Connect to other servers and ask them to connect to me
-	connectToServers()
+	connectToServers(serverList)
 
 	debug(id, "Initialization finished!\n")
 
@@ -488,7 +532,16 @@ func main() {
 	id, _ = strconv.ParseInt(os.Args[1], 10, 64) // get id from command line
 	idStr = os.Args[1]
 
-	Init()
+	serverList := make([]int64, 0)
+
+	for idx := 2; idx < len(os.Args); idx++ {
+		serverID, _ := strconv.ParseInt(os.Args[idx], 10, 64)
+		serverList = append(serverList, serverID)
+	}
+
+	Init(serverList)
+
+	defer logFileHandler.Close()
 
 	for {
 

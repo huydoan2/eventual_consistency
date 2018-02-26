@@ -27,6 +27,11 @@ type PutData struct {
 
 func ExecServer(id int64) {
 	server := exec.Command("../server/server", strconv.FormatInt(id, 10))
+
+	for serverID, _ := range serverProcess {
+		server.Args = append(server.Args, strconv.FormatInt(serverID, 10))
+	}
+
 	serverProcess[id] = server
 	serverErr := server.Start()
 	//fmt.Printf("%s\n", serverOut)
@@ -267,6 +272,7 @@ func get(clientId int64, key string) {
 	client, ok := clients[clientId]
 	if !ok {
 		fmt.Printf("Client[%d] does not exist\n", clientId)
+		return
 	}
 
 	var reply string
@@ -274,6 +280,7 @@ func get(clientId int64, key string) {
 
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	} else {
 		fmt.Printf("Client[%d]\t%s:%s\n", clientId, key, reply)
 	}
@@ -282,26 +289,49 @@ func get(clientId int64, key string) {
 func stabilize() {
 	fmt.Printf("Stablizing ...\n")
 
-	//server := getRandomServer()
+	server := getRandomServer()
 
-	server := servers[0]
+	//server := servers[0]
 	if server == nil {
 		fmt.Printf("No connected servers to stabilize\n")
 		return
 	}
 
-	var arg, reply int64
-	err := server.Call("ServerService.InitStabilize", &arg, &reply)
-
-	if err != nil {
-		fmt.Println("Server RPC for Stabilize failed")
-		fmt.Println(err.Error())
-	} else {
-		fmt.Println("Succeeded stabilizing")
+	serverList := make(map[int64]bool)
+	for serverID := range serverProcess {
+		serverList[serverID] = true
 	}
 
+	for len(serverList) != 0 {
+		var arg int64
+		reply := make(map[int64]bool)
+		err := server.Call("ServerService.InitStabilize", &arg, &reply)
+
+		if err != nil {
+			fmt.Println("Server RPC for Stabilize failed")
+			fmt.Println(err.Error())
+		} else {
+			fmt.Println("Succeeded stabilizing")
+		}
+
+		fmt.Println("List of servers in this MST")
+		for k, _ := range reply {
+			fmt.Printf("%d\n", k)
+			delete(serverList, k)
+		}
+		for k, v := range servers {
+			if _, ok := serverList[k]; ok {
+				server = v
+			}
+		}
+	}
+
+	// If yes, set server equal to this server, continue
+
+	// If not, break
+
 	// Invalidate clients' caches
-	InvalidateClientCache()
+	//InvalidateClientCache()
 
 }
 
@@ -326,7 +356,7 @@ func getRandomServer() *rpc.Client {
 			i++
 		}
 	}
-	fmt.Printf("Chosen server is %d", serverPos)
+	fmt.Printf("Chosen server is %d\n", serverPos)
 	return server
 }
 
@@ -348,17 +378,19 @@ func PrintUsage() {
 
 }
 
-func AutomaticTest() {
+func AutomaticTest1() {
 	joinServer(0)
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
 	joinServer(4)
-	// defer killServer(0)
-	// defer killServer(1)
-	// defer killServer(2)
-	// defer killServer(3)
-	// defer killServer(4)
+
+	breakConnection(0, 2)
+	breakConnection(0, 3)
+	breakConnection(0, 4)
+	breakConnection(1, 2)
+	breakConnection(1, 3)
+	breakConnection(1, 4)
 
 	joinClient(5, 0)
 	joinClient(6, 1)
@@ -424,16 +456,65 @@ func AutomaticTest() {
 	printStore(2)
 	printStore(3)
 	printStore(4)
+
+}
+
+func SimpleTest() {
+
+	joinServer(0)
+	joinServer(1)
+	joinServer(2)
+	joinServer(3)
+	joinServer(4)
+
+	breakConnection(0, 2)
+	breakConnection(0, 3)
+	breakConnection(0, 4)
+	breakConnection(1, 2)
+	breakConnection(1, 3)
+	breakConnection(1, 4)
+
+	joinClient(5, 0)
+	joinClient(6, 1)
+	joinClient(7, 2)
+	joinClient(8, 2)
+	createConnection(8, 3)
+	joinClient(9, 4)
+
+	put(5, "1", "a")
+	put(6, "1", "c")
+	put(7, "1", "b")
+	put(8, "2", "d")
+	put(9, "1", "c")
+
+	get(5, "1")
+	get(6, "1")
+	get(7, "1")
+	get(8, "1")
+	get(9, "1")
+
+	stabilize()
+
+	get(5, "1")
+	get(6, "1")
+	get(7, "1")
+	get(8, "1")
+	get(9, "1")
+
 }
 
 func main() {
-	//AutomaticTest()
+	AutomaticTest1()
+
+	// SimpleTest()
+	// for {
+
+	// }
 
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Enter commands:")
+	fmt.Printf("Enter commands:\n> ")
 
 	for scanner.Scan() {
-		fmt.Print("> ")
 		line := scanner.Text()
 		elements := strings.Split(line, " ")
 
@@ -587,10 +668,13 @@ func main() {
 			goto InvalidInput
 		}
 		fmt.Println("################################################")
+		fmt.Println()
+		fmt.Print("> ")
 		continue
 
 	InvalidInput:
 		PrintUsage()
+		fmt.Printf("> ")
 
 	}
 

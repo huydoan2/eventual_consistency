@@ -29,6 +29,7 @@ var RPCserver *rpc.Server
 
 var cCache *cache.Cache            // Client cache
 var vClock vectorclock.VectorClock // local vector clock
+var versionNumber int64
 
 /*
 	RPC
@@ -94,6 +95,18 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 
 	server := getRandomServer()
 
+	var serverVersion int64
+	errVersion := server.Call("ServerService.GetVersionNumber", &id, &serverVersion)
+	if errVersion != nil {
+		debug(id, fmt.Sprintf("Failed to get version number from server"))
+		return errVersion
+	}
+
+	if serverVersion > versionNumber {
+		cCache.Invalidate()
+		versionNumber = serverVersion
+	}
+
 	var data cache.Payload
 	data.Key = putData.Key
 	data.Val = putData.Value
@@ -101,17 +114,7 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 	data.ValTime = vClock
 	data.Clock = vClock
 
-	// cache the put request
-	// debug(id, "Caching")
-	// debug(id, data.Key)
-	// debug(id, data.Val)
-	// debug(id, fmt.Sprintf(data.ValTime))
-
 	cCache.Insert(&data)
-	//tmp := make(map[string]cache.Value)
-	//val := cache.Value{Val: data.Val, Clock: data.ValTime}
-	//debug(id, "Created value")
-	//cCache.Data[data.Key] = val
 
 	var serverResp cache.Payload
 	// We have a server now, put data to it
@@ -134,6 +137,22 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 
 // Get: RPC to querry the value of a key
 func (cs *ClientService) Get(key *string, reply *string) error {
+
+	// If not, query a server for the key
+	server := getRandomServer()
+
+	var serverVersion int64
+	errVersion := server.Call("ServerService.GetVersionNumber", &id, &serverVersion)
+	if errVersion != nil {
+		debug(id, fmt.Sprintf("Failed to get version number from server"))
+		return errVersion
+	}
+
+	if serverVersion > versionNumber {
+		cCache.Invalidate()
+		versionNumber = serverVersion
+	}
+
 	val, ok := cCache.Find(key)
 
 	// Found the entry in the cache
@@ -141,9 +160,6 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 		*reply = val.Val
 		return nil
 	}
-
-	// If not, query a server for the key
-	server := getRandomServer()
 
 	var data cache.Payload
 	arg := cache.Payload{Key: *key, Clock: vClock}
@@ -204,6 +220,9 @@ func Init(serverId int64) {
 	InitLogger()
 	debug(id, "Starting RPC server ...\n")
 
+	// Init versionNumber
+	versionNumber = 0
+
 	// Init VectorClock
 	vClock.Id = id
 
@@ -250,15 +269,17 @@ func getRandomServer() *rpc.Client {
 	serverPos := r.Int63n(int64(length))
 	var server *rpc.Client
 	var i int64
+	var serverID int64
+
 	// A bit complex to get a random server
-	for _, server = range RPCclients {
+	for serverID, server = range RPCclients {
 		if i == serverPos {
 			break
 		} else {
 			i++
 		}
 	}
-	debug(id, fmt.Sprintf("Chosen server is %d", serverPos))
+	debug(id, fmt.Sprintf("Chosen server is %d", serverID))
 	return server
 }
 
