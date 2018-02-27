@@ -62,7 +62,7 @@ func (ss *ServerService) GetVersionNumber(serverID *int64, serverVersion *int64)
 
 // BreakConnection : RPC to break connection between servers
 //					: Reply 0 if conn existed and closed, 1 if never existed
-func (serverService *ServerService) BreakConnection(serverID *int64, reply *int64) error {
+func (ss *ServerService) BreakConnection(serverID *int64, reply *int64) error {
 	debug(id, fmt.Sprintf("Breaking connection to Server[%d]...", *serverID))
 
 	if client, ok := RPCclients[*serverID]; ok {
@@ -79,7 +79,7 @@ func (serverService *ServerService) BreakConnection(serverID *int64, reply *int6
 
 // CreateConnection : RPC to create connection between client and server with id
 //					: Reply 0 if conn existed and created, 1 if never existed
-func (serverService *ServerService) CreateConnection(serverID *int64, reply *int64) error {
+func (ss *ServerService) CreateConnection(serverID *int64, reply *int64) error {
 	debug(id, fmt.Sprintf("Creating connection to Server[%d]...", *serverID))
 
 	if _, ok := RPCclients[*serverID]; !ok {
@@ -133,7 +133,7 @@ func (ss *ServerService) Cleanup(targetID *int64, reply *int64) error {
 	return nil
 }
 
-// PrintStore: RPC returns to "client" the key-value store without the time information
+// PrintStore : RPC returns to "client" the key-value store without the time information
 // reply: the memory will be allocated by the function. User only needs to provide pointer
 func (ss *ServerService) PrintStore(notUse *int64, reply *map[string]string) error {
 	//ret := make(map[string]string)
@@ -405,14 +405,6 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *map[int64]bool) error 
 		debug(id, fmt.Sprintf("Scatter failed with %v", errScatter))
 		return errScatter
 	}
-
-	// // Update the datastore
-	// go func() {
-	// 	for k, v := range sCache.Data {
-	// 		data[k] = v
-	// 	}
-	// 	//sCache.Invalidate()
-	// }()
 
 	return nil
 }

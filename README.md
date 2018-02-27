@@ -1,8 +1,9 @@
 # eventual_consistency
 
 Names: Saharsh Oza and Huy Doan
-UT EID: sso284 and hd5575
+UT EIDs: sso284 and hd5575
 
+The project implements a distributed key-value store system with eventual consistency. 
 
 Key Ideas: 
 
@@ -22,7 +23,7 @@ b) Server cache:
 
 Details of API Implementation:
 
-1. Put [clientID] [key] [value]: 
+1. put [clientID] [key] [value]: 
 a) The master calls Put on a client with a key-value pair. 
 b) Client Put: 
 	i) Client picks a random server then querries the version of the server. If the client's version number is outdated, it invalidates its cache. This means that servers are stabilized and have the most updated version and the client is outdated.
@@ -37,7 +38,7 @@ d) Client after Server Put RPC returns:
 	i) Synchronizes its time with that in the server response
 	ii) Update its cache if server response with an entry which has higher time value
 
-2. Get [clientID] [key]:
+2. get [clientID] [key]:
 a) The master calls Get on the client with a key
 b) Client Get:
 	i) The client check for cace invalidation as in Put (b.i)
@@ -50,7 +51,7 @@ c) Server Get:
 d) Client after Server RPC Get returns:
 	i) Syncrhonizes its time and cache entry according to the server's response. Similar to Put
 
-3. Stabilize:
+3. stabilize:
 a) Master runs stabilize on all parititions
 b) Master picks a random server and initiates stabilize on it. This server plays as the root of the MST for its partition. The root then calls stabilize on its self to start the process. A stabilize call on a server follows the steps: Gather, and Scatter
 c) Gather (Converge cast):
@@ -64,3 +65,41 @@ e) Scatter (Broadcast):
 	ii) The cache is then invalidated.
 	iii) The node spans Scatter calls on its children only. This keeps the traffic minimum by not sending the entire cache content from the parent to everyone the node is connected to.
 	iv) At the end of the scatter, a version number is updated. This lets the client know whether a new stabilize has been called, in which case it will know that its client side cache may be stale.
+
+4. killServer [id]:
+a) Master tells the target server to clean up: connections, close log file, etc.
+b) Master send SIGKILL to the target server to actually kill the process.
+
+5. joinServer [id]:
+a) Master creates the server process and pass the id and the list of existing servers as command-line arguments.
+b) The server process calls its Init() method to set up its state and connect to other servers. Once it connects to other servers as a client, it send RPCs to other servers and asked them to connect to it as clients. After this, the new server has bi-directional channels with all existing servers.
+
+6. joinClient [clientId][serverId]:
+a) Master creates the client process similarly to how it creates a server process.
+b) The client connects to the target server socket.
+
+7. createConnection [id1][id2]:
+a) Master asks process with id1 to join process id2 as a client.
+b) Process id1 then ask process id2 to join it as a client.
+
+8. breakConnection [id1][id2]:
+a) Master in parallel ask two processes to close the client connection to the other process.
+
+9. printStore [id]:
+a) Master ask the target server for its data store.
+b) Master prints the data store out to Stdin.
+
+*Note:
+1. We did not mention the details of checking the validity of arguments and the state of the system such as whether that client/server exists. Look at the code for more details.
+2. The master connects to all processes as a client so that it can make RPC requests to them.
+3. The system can only accomodate 10 processes due to the limitation in vectorclock's implementation
+4. Each process has a log in the "log" directory. Refer to them for more information, especially for debugging.
+5. Building the project still has trouble with the two packages: vectorclock and cache. Please use the pre-built packages included in the directories.
+
+Build and Run the project:
+1. Go to the project's root folder ("eventual_consistency) and type make.
+2. Make sure that the "log" directory exists in the root folder. If not, create one.
+3. Go to the "master" directory.
+4. run ./master < input.txt assuming the input.txt is the file containing the commands following the format:
+	command_api_1 arg1 arg2 arg3 ...
+	command_api_2 arg1 ...
