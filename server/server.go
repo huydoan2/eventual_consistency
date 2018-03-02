@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"sync"
 
-	"../cache"
-	"../vectorclock"
+	"github.com/huydoan2/eventual_consistency/cache"
+	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -45,7 +45,6 @@ type ServerService int //temporary type
 
 // StabilizePayload : RPC type for transporting cache data in Stabilize
 type StabilizePayload struct {
-	dummy     string
 	IsChild   bool
 	Data      map[string]cache.Value
 	ChildList map[int64]bool
@@ -272,7 +271,6 @@ func (ss *ServerService) Gather(arg *int64, reply *StabilizePayload) error {
 
 			defer wg.Done()
 			var response StabilizePayload
-			response.dummy = "DUMMY"
 			response.Data = make(map[string]cache.Value)
 			response.ChildList = make(map[int64]bool)
 			response.IsChild = false
@@ -377,9 +375,8 @@ func (ss *ServerService) Scatter(arg *StabilizePayload, reply *int64) error {
 
 // InitStabilize starts the Stabilize algorithm. This server is the root of the MST
 func (ss *ServerService) InitStabilize(arg *int64, reply *map[int64]bool) error {
-	debug(id, "Start stabilizing as root")
+	debug(id, "Start stabilizing as root ...")
 	var response StabilizePayload
-	response.dummy = "DUMMY"
 	response.Data = make(map[string]cache.Value)
 	response.ChildList = make(map[int64]bool)
 	response.IsChild = false
@@ -400,7 +397,7 @@ func (ss *ServerService) InitStabilize(arg *int64, reply *map[int64]bool) error 
 	var dummyReply int64
 	debug(id, "Beginning scatter ...")
 	errScatter := ss.Scatter(&response, &dummyReply)
-	debug(id, "Scatter complete ...")
+	debug(id, "Scatter completed")
 	if errScatter != nil {
 		debug(id, fmt.Sprintf("Scatter failed with %v", errScatter))
 		return errScatter
@@ -463,7 +460,7 @@ var logFileHandler *os.File
 func InitLogger() {
 	//CreateLogDir("../log")
 
-	logFileHandler, err := os.OpenFile("../log/server"+idStr, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logFileHandler, err := os.OpenFile("log/server"+idStr, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"../cache"
-	"../vectorclock"
+	"github.com/huydoan2/eventual_consistency/cache"
+	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
 const masterPort int64 = 3000
@@ -202,7 +202,7 @@ func (cs *ClientService) InvalidateCache(arg *int64, reply *int64) error {
 var logger *log.Logger
 
 func InitLogger() {
-	f, err := os.OpenFile("../log/client"+idStr, os.O_RDWR|os.O_CREATE, 0666)
+	f, err := os.OpenFile("log/client"+idStr, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)
 	}

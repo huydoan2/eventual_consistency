@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"../vectorclock"
+	"github.com/huydoan2/eventual_consistency/vectorclock"
 )
 
 // key-value store cache

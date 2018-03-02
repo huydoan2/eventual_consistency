@@ -26,7 +26,7 @@ type PutData struct {
 }
 
 func ExecServer(id int64) {
-	server := exec.Command("../server/server", strconv.FormatInt(id, 10))
+	server := exec.Command("./server", strconv.FormatInt(id, 10))
 
 	for serverID, _ := range serverProcess {
 		server.Args = append(server.Args, strconv.FormatInt(serverID, 10))
@@ -43,7 +43,7 @@ func ExecServer(id int64) {
 }
 
 func ExecClient(clientId, serverId int64) {
-	client := exec.Command("../client/client", strconv.FormatInt(clientId, 10), strconv.FormatInt(serverId, 10))
+	client := exec.Command("./client", strconv.FormatInt(clientId, 10), strconv.FormatInt(serverId, 10))
 	clientProcess[clientId] = client
 	clientErr := client.Start()
 	//fmt.Printf("%s\n", serverOut)
@@ -310,32 +310,27 @@ func stabilize() {
 		if err != nil {
 			fmt.Println("Server RPC for Stabilize failed")
 			fmt.Println(err.Error())
-		} else {
-			fmt.Println("Succeeded stabilizing")
 		}
 
-		fmt.Println("List of servers in this MST")
-		for k, _ := range reply {
-			fmt.Printf("%d\n", k)
+		fmt.Println("List of servers in this MST: ")
+		for k := range reply {
+			fmt.Printf("%d\t", k)
 			delete(serverList, k)
 		}
+		fmt.Println()
+
 		for k, v := range servers {
 			if _, ok := serverList[k]; ok {
 				server = v
 			}
 		}
 	}
-
-	// If yes, set server equal to this server, continue
-
-	// If not, break
-
-	// Invalidate clients' caches
-	//InvalidateClientCache()
+	fmt.Println("Succeeded stabilizing")
 
 }
 
 /* *******************Helper Functions******************/
+// getRandomServer : get an rpc.Client handler of a random existing server
 func getRandomServer() *rpc.Client {
 	length := len(servers)
 
@@ -360,6 +355,8 @@ func getRandomServer() *rpc.Client {
 	return server
 }
 
+// InvalidateClientCache : a test function to invalidate clients' caches from the master
+// side. Used for testing before version number is introduced. Not being used in current code
 func InvalidateClientCache() {
 	var count uint64
 	for _, client := range clients {
@@ -374,10 +371,24 @@ func InvalidateClientCache() {
 	}
 }
 
-func PrintUsage() {
+// Cleanup : send SIGKILL to all of the client/server processes to kill them. This make sure
+// that after the master exits, those processes aren't hanging around
+func Cleanup() {
+	for _, s := range serverProcess {
+		s.Process.Kill()
+	}
 
+	for _, c := range clientProcess {
+		c.Process.Kill()
+	}
 }
 
+// PrintUsage : print the usage of the master program. We are keeping it minimal here
+func PrintUsage() {
+	fmt.Println("Invalid command. Please refer to the APIs")
+}
+
+// AutomaticTest1 :
 func AutomaticTest1() {
 	joinServer(0)
 	joinServer(1)
@@ -459,7 +470,7 @@ func AutomaticTest1() {
 
 }
 
-func SimpleTest() {
+func SimpleTest1() {
 
 	joinServer(0)
 	joinServer(1)
@@ -503,13 +514,27 @@ func SimpleTest() {
 
 }
 
+func TestPartition() {
+	joinServer(0)
+	joinServer(1)
+	breakConnection(0, 1)
+	joinClient(2, 0)
+	joinClient(3, 1)
+	createConnection(2, 1)
+	createConnection(3, 0)
+
+	put(2, "1", "a")
+	get(3, "1")
+	put(3, "1", "b")
+	get(2, "1")
+}
+
 func main() {
-	AutomaticTest1()
-
 	// SimpleTest()
-	// for {
+	//AutomaticTest1()
+	TestPartition()
 
-	// }
+	defer Cleanup()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Printf("Enter commands:\n> ")
@@ -517,13 +542,6 @@ func main() {
 	for scanner.Scan() {
 		line := scanner.Text()
 		elements := strings.Split(line, " ")
-
-		// fmt.Printf("Read: %s\n", line)
-		// fmt.Print("Args: ")
-		// for i := 0; i < len(elements)-1; i++ {
-		// 	fmt.Printf("**%s", elements[i])
-		// }
-		// fmt.Printf("**%s**\n", elements[len(elements)-1])
 
 		// Skip empty line
 		if len(elements) == 0 {
@@ -663,6 +681,9 @@ func main() {
 			}
 
 			get(id1, elements[2])
+
+		case "exit":
+			return
 
 		default:
 			goto InvalidInput
