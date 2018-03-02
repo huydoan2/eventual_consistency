@@ -95,17 +95,17 @@ func (cs *ClientService) Put(putData *PutData, reply *int64) error {
 
 	server := getRandomServer()
 
-	var serverVersion int64
-	errVersion := server.Call("ServerService.GetVersionNumber", &id, &serverVersion)
-	if errVersion != nil {
-		debug(id, fmt.Sprintf("Failed to get version number from server"))
-		return errVersion
-	}
+	// var serverVersion int64
+	// errVersion := server.Call("ServerService.GetVersionNumber", &id, &serverVersion)
+	// if errVersion != nil {
+	// 	debug(id, fmt.Sprintf("Failed to get version number from server"))
+	// 	return errVersion
+	// }
 
-	if serverVersion > versionNumber {
-		cCache.Invalidate()
-		versionNumber = serverVersion
-	}
+	// if serverVersion > versionNumber {
+	// 	cCache.Invalidate()
+	// 	versionNumber = serverVersion
+	// }
 
 	var data cache.Payload
 	data.Key = putData.Key

@@ -12,8 +12,6 @@ Key Ideas:
 3. Caching: 
 a) Client Cache (write through): 
 	i) The protocol uses client side caching to provide the two session gaurantees of read your own write and montonic reads. 
-	ii) The cache also reduces latency for every get operation. 
-	iii) Client cache manages its invalidation by querying a version number from the server. This ensures it does not return stale data after a stabilize
 b) Server cache:
 	i) Server side cache only stores Put operations that occur in between 2 stabilize calls
 	ii) Server side caching reduces latency of total ordering in the stabilize call. 
@@ -26,9 +24,8 @@ Details of API Implementation:
 1. put [clientID] [key] [value]: 
 a) The master calls Put on a client with a key-value pair. 
 b) Client Put: 
-	i) Client picks a random server then querries the version of the server. If the client's version number is outdated, it invalidates its cache. This means that servers are stabilized and have the most updated version and the client is outdated.
-	ii) The client stores the k-v-time entry in its cache. Time is the current client vector clock
-	iii) Client calls Put RPC on the chosen server from step(i).
+	i) The client stores the k-v-time entry in its cache. Time is the current client vector clock
+	ii) Client calls Put RPC on the chosen server from step(i).
 c) Server Put:
 	i) The server syncs its time with the client time in the request
 	ii) The server first checks if the entry exists in its data store and has a higher timestamp that the client request. In that case, the server ignores the client request.
@@ -39,19 +36,19 @@ d) Client after Server Put RPC returns:
 	ii) Update its cache if server response with an entry which has higher time value
 
 
-2. get [clientID] [key]: A client always return the value for a key it has in its cache. If it doesn't have one, it querries a random server it connects to. It also syncs its time with the server. The client's cache is only invalidated when it connects to a server with a higher version number, indicating that a stabilize call have been done and the client needs to update itself.
+2. get [clientID] [key]: The clieent querries a random server it connects to for the value of the key. If the server's response value has a stale value and client has newer value in its cache, it returns the cached value. Otherwise it updates its cache and returns server's response. Client synchronizes its time with the server through this process, too.
 
 a) The master calls Get on the client with a key
 b) Client Get:
-	i) The client check for cace invalidation as in Put (b.i)
-	ii) Check to see if the key is present in the cache. If yes, return it to the master. Else query a random server for it.
+	i) The client querries a random server
+	ii) The client compare the server's response with what it has in the cache and respond appropriately
 c) Server Get:
-	i) The server syncrhonizes its time with client's request. It then tries to return the entry in its data store for the queried key.
-	This will never return a value older than what the client has already cached for the following reason. The client cache will be invalid only after the servers stabilize. Hence, if the client queries the server, it is because a stabilize occurred among the servers. Stabilize will total order the puts for a key across all servers. This ensures that the new value it reads will be strictly more recent than its own cache.
+	i) The server syncrhonizes its time with client's request. It then tries to return the entry in its data store for the queried key.	
 	ii) If the server does not have the key in its data store, it returns "ERR_KEY" instead.
 	iii) The server includes its incremented time in the response to the client.
 d) Client after Server RPC Get returns:
 	i) Syncrhonizes its time and cache entry according to the server's response. Similar to Put
+	ii) Compares the cache value and server's response. Update the cache accordingly.
 
 
 3. stabilize: All servers in the same partition will have a uniform datastore after stabilizing. This property is not guaranteed for servers in different isolated partitions.

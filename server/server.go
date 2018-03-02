@@ -179,9 +179,9 @@ func (ss *ServerService) Put(clientReq *cache.Payload, serverResp *cache.Payload
 	if update == 1 {
 		sCache.Insert(clientReq)
 		debug(id, "Record updated")
-		temp := sCache.Data[clientReq.Key].Clock
+		// temp := sCache.Data[clientReq.Key].Clock
 
-		debug(id, fmt.Sprintf("sCache Clock: %s", temp.ToString()))
+		// debug(id, fmt.Sprintf("sCache Clock: %s", temp.ToString()))
 	}
 
 	return nil

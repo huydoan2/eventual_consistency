@@ -399,19 +399,40 @@ func AutomaticTest() {
 	joinServer(4)
 
 	// Partition as simple test
-	breakConnection(0, 2)
-	breakConnection(0, 3)
-	breakConnection(0, 4)
-	breakConnection(1, 2)
-	breakConnection(1, 3)
-	breakConnection(1, 4)
+	// breakConnection(0, 2)
+	// breakConnection(0, 3)
+	// breakConnection(0, 4)
+	// breakConnection(1, 2)
+	// breakConnection(1, 3)
+	// breakConnection(1, 4)
 
-	// Join clients to each partition
+	// Join clients
 	joinClient(5, 0)
 	joinClient(6, 1)
 	joinClient(7, 2)
 	joinClient(8, 3)
 	joinClient(9, 4)
+
+	createConnection(5, 1)
+	createConnection(5, 2)
+	createConnection(5, 3)
+	createConnection(5, 4)
+	createConnection(6, 0)
+	createConnection(6, 2)
+	createConnection(6, 3)
+	createConnection(6, 4)
+	createConnection(7, 0)
+	createConnection(7, 1)
+	createConnection(7, 3)
+	createConnection(7, 4)
+	createConnection(8, 0)
+	createConnection(8, 1)
+	createConnection(8, 2)
+	createConnection(8, 4)
+	createConnection(9, 0)
+	createConnection(9, 1)
+	createConnection(9, 2)
+	createConnection(9, 3)
 
 	// Random puts
 	const NUMKEYS int = 20
@@ -616,8 +637,8 @@ func TestPartition() {
 
 func main() {
 	//SimplePartition1()
-	SimplePartition2()
-	// AutomaticTest1()
+	// SimplePartition2()
+	AutomaticTest()
 	// TestPartition()
 
 	defer Cleanup()
