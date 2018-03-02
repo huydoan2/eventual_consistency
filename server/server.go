@@ -219,7 +219,7 @@ func Order(otherData *map[string]cache.Value, updateData bool) error {
 		debug(id, fmt.Sprintf("Entry is %s: %s, %s", k, v.Val, v.Clock.ToString()))
 		if myEntry, ok := sCache.Data[k]; ok {
 			debug(id, fmt.Sprintf("Compare myEntry: %s, %s and newEntry: %s, %s", myEntry.Val, myEntry.Clock.ToString(), v.Val, v.Clock.ToString()))
-			if myEntry.Clock.Compare(&v.Clock) == vectorclock.GREATER {
+			if myEntry.Clock.Compare(&v.Clock) == vectorclock.LESS {
 				debug(id, "newEntry is Greater and will update")
 				sCache.Data[k] = v
 				debug(id, fmt.Sprintf("Update Cache on order: %s:%s", k, v.Val))

@@ -389,13 +389,16 @@ func PrintUsage() {
 }
 
 // AutomaticTest1 :
-func AutomaticTest1() {
+func AutomaticTest() {
+
+	// Join servers
 	joinServer(0)
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
 	joinServer(4)
 
+	// Partition as simple test
 	breakConnection(0, 2)
 	breakConnection(0, 3)
 	breakConnection(0, 4)
@@ -403,12 +406,14 @@ func AutomaticTest1() {
 	breakConnection(1, 3)
 	breakConnection(1, 4)
 
+	// Join clients to each partition
 	joinClient(5, 0)
 	joinClient(6, 1)
 	joinClient(7, 2)
 	joinClient(8, 3)
 	joinClient(9, 4)
 
+	// Random puts
 	const NUMKEYS int = 20
 	const NUMVALS int = 52
 
@@ -470,14 +475,16 @@ func AutomaticTest1() {
 
 }
 
-func SimpleTest1() {
+func SimplePartition1() {
 
+	// Create 5 servers
 	joinServer(0)
 	joinServer(1)
 	joinServer(2)
 	joinServer(3)
 	joinServer(4)
 
+	// Create partition of [0,1] and [2,3,4]
 	breakConnection(0, 2)
 	breakConnection(0, 3)
 	breakConnection(0, 4)
@@ -485,6 +492,7 @@ func SimpleTest1() {
 	breakConnection(1, 3)
 	breakConnection(1, 4)
 
+	// Connect clients to each partition (no intersection)
 	joinClient(5, 0)
 	joinClient(6, 1)
 	joinClient(7, 2)
@@ -492,47 +500,125 @@ func SimpleTest1() {
 	createConnection(8, 3)
 	joinClient(9, 4)
 
+	// Put
 	put(5, "1", "a")
 	put(6, "1", "c")
 	put(7, "1", "b")
 	put(8, "2", "d")
 	put(9, "1", "c")
 
-	get(5, "1")
-	get(6, "1")
-	get(7, "1")
-	get(8, "1")
-	get(9, "1")
+	// Gets provide 2 session guarantees but no consistency/total order
+	get(5, "1") // a
+	get(6, "1") // c
+	get(7, "1") // c
+	get(8, "1") // b or ERR_KEY
+	get(9, "1") // c
 
+	printStore(0)
+	printStore(1)
+	printStore(2)
+	printStore(3)
+	printStore(4)
+
+	// Stabilizes 2 partitions separately
 	stabilize()
 
-	get(5, "1")
-	get(6, "1")
-	get(7, "1")
-	get(8, "1")
-	get(9, "1")
+	printStore(0)
+	printStore(1)
+	printStore(2)
+	printStore(3)
+	printStore(4)
 
+	// Correct value ordered in each partition
+	get(5, "1") // c
+	get(6, "1") // c
+	get(7, "1") // c
+	get(8, "1") // c
+	get(9, "1") // c
+
+}
+
+func SimplePartition2() {
+
+	// Create 4 servers
+	joinServer(0)
+	joinServer(1)
+	joinServer(2)
+	joinServer(3)
+
+	// Create partition of [0,1] and [2,3]
+	breakConnection(0, 2)
+	breakConnection(0, 3)
+	breakConnection(1, 2)
+	breakConnection(1, 3)
+
+	// Connect single client to first partitions
+	joinClient(5, 0)
+	createConnection(5, 1)
+
+	// Put to each server
+	put(5, "1", "a")
+
+	// Get the key
+	get(5, "1") // a
+
+	// Connect same client to second partition
+	createConnection(5, 2)
+	createConnection(5, 3)
+
+	// Break connection to first partition. This guarantees
+	// that the new writes only go to second partition
+	breakConnection(5, 0)
+	breakConnection(5, 1)
+
+	// Put to second partition
+	put(5, "1", "b")
+
+	// Get 1 from client
+	get(5, "1") // b
+
+	// Stabilize each partition
+	stabilize()
+
+	// Break connection to second partition
+	breakConnection(5, 2)
+	breakConnection(5, 3)
+
+	// Connect back to first partition
+	createConnection(5, 0)
+	createConnection(5, 1)
+
+	// Now get value for 1. Check if it is serviced
+	// from cache (monotonic reads) or from server (wrong answer)
+	get(5, "1") // b
 }
 
 func TestPartition() {
 	joinServer(0)
 	joinServer(1)
 	breakConnection(0, 1)
+
 	joinClient(2, 0)
 	joinClient(3, 1)
-	createConnection(2, 1)
-	createConnection(3, 0)
+	//createConnection(2, 1)
+	//createConnection(3, 0)
 
 	put(2, "1", "a")
-	get(3, "1")
-	put(3, "1", "b")
+	//get(3, "1")
+	put(3, "2", "b")
+	//get(2, "1")
+
+	stabilize()
+	createConnection(2, 1)
+	//breakConnection(2, 0)
 	get(2, "1")
 }
 
 func main() {
-	// SimpleTest()
-	//AutomaticTest1()
-	TestPartition()
+	//SimplePartition1()
+	SimplePartition2()
+	// AutomaticTest1()
+	// TestPartition()
 
 	defer Cleanup()
 

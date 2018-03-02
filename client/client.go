@@ -149,17 +149,17 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 	}
 
 	if serverVersion > versionNumber {
-		cCache.Invalidate()
+		//cCache.Invalidate()
 		versionNumber = serverVersion
 	}
 
-	val, ok := cCache.Find(key)
+	// val, ok := cCache.Find(key)
 
-	// Found the entry in the cache
-	if ok {
-		*reply = val.Val
-		return nil
-	}
+	// // Found the entry in the cache
+	// if ok {
+	// 	*reply = val.Val
+	// 	return nil
+	// }
 
 	var data cache.Payload
 	arg := cache.Payload{Key: *key, Clock: vClock}
@@ -169,24 +169,73 @@ func (cs *ClientService) Get(key *string, reply *string) error {
 		// Error with RPC call or from the server
 		s := fmt.Sprintf("Failed to communicate with server\nError: %v", err)
 		debug(id, s)
-		return errors.New(s)
+		// return errors.New(s)
 	}
 
 	// RPC succeeded, sync time
 	vClock.Update(&data.Clock)
 
-	// Check the replied data from the server
 	if data.Val == "ERR_KEY" {
-		debug(id, fmt.Sprintf("%s:ERR_KEY", *key))
-		*reply = "ERR_KEY"
-		return nil
+		if val, ok := cCache.Find(key); ok {
+			*reply = val.Val
+			debug(id, "Server says ERR_KEY, return cached value")
+		} else {
+			*reply = "ERR_KEY"
+		}
+	} else {
+		if val, ok := cCache.Find(key); ok {
+			// Compare cache and server response
+			if val.Clock.Compare(&data.ValTime) == vectorclock.LESS {
+				cCache.Insert(&data)
+				*reply = data.Val
+				debug(id, "Server has newer value, update cache")
+			} else {
+				*reply = val.Val
+				debug(id, "Server has stale value, return cached value")
+			}
+		} else {
+			cCache.Insert(&data)
+			*reply = data.Val
+			debug(id, "Cache does not have the entry. Return server's response")
+		}
 	}
 
+	// Check the replied data from the server
+	// if data.Val == "ERR_KEY" {
+
+	// 	debug(id, "Checking other servers... ")
+
+	// 	for _, s := range RPCclients {
+	// 		err := s.Call("ServerService.Get", &arg, &data)
+	// 		if err != nil {
+	// 			// Error with RPC call or from the server
+	// 			debug(id, fmt.Sprintf("Failed to communicate with server\nError: %v", err))
+	// 			continue
+	// 		}
+
+	// 		// RPC succeeded, sync time
+	// 		vClock.Update(&data.Clock)
+
+	// 		// Check the replied data from the server
+	// 		if data.Val != "ERR_KEY" {
+
+	// 			cCache.Insert(&data)
+	// 			*reply = data.Val
+	// 			return nil
+	// 		}
+
+	// 	}
+
+	// 	debug(id, fmt.Sprintf("%s:ERR_KEY", *key))
+	// 	*reply = "ERR_KEY"
+	// 	return nil
+	// }
+
 	// Server has the value, update the cache
-	cCache.Insert(&data)
+	//cCache.Insert(&data)
 
 	//return value to the master
-	*reply = data.Val
+	//*reply = data.Val
 
 	return nil
 }

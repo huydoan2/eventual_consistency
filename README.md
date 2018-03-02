@@ -70,32 +70,35 @@ e) Scatter (Broadcast):
 	iii) The node spans Scatter calls on its children only. This keeps the traffic minimum by not sending the entire cache content from the parent to everyone the node is connected to.
 	iv) At the end of the scatter, a version number is updated. This lets the client know whether a new stabilize has been called, in which case it will know that its client side cache may be stale.
 
-<<<<<<< HEAD
 
-=======
->>>>>>> d068b2a90461e934f2b2528804657406481647a7
 4. killServer [id]:
 a) Master tells the target server to clean up: connections, close log file, etc.
 b) Master send SIGKILL to the target server to actually kill the process.
+
 
 5. joinServer [id]:
 a) Master creates the server process and pass the id and the list of existing servers as command-line arguments.
 b) The server process calls its Init() method to set up its state and connect to other servers. Once it connects to other servers as a client, it send RPCs to other servers and asked them to connect to it as clients. After this, the new server has bi-directional channels with all existing servers.
 
+
 6. joinClient [clientId][serverId]:
 a) Master creates the client process similarly to how it creates a server process.
 b) The client connects to the target server socket.
+
 
 7. createConnection [id1][id2]:
 a) Master asks process with id1 to join process id2 as a client.
 b) Process id1 then ask process id2 to join it as a client.
 
+
 8. breakConnection [id1][id2]:
 a) Master in parallel ask two processes to close the client connection to the other process.
+
 
 9. printStore [id]:
 a) Master ask the target server for its data store.
 b) Master prints the data store out to Stdin.
+
 
 *Note:
 1. We did not mention the details of checking the validity of arguments and the state of the system such as whether that client/server exists. Look at the code for more details.
