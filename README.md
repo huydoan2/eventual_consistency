@@ -70,7 +70,10 @@ e) Scatter (Broadcast):
 	iii) The node spans Scatter calls on its children only. This keeps the traffic minimum by not sending the entire cache content from the parent to everyone the node is connected to.
 	iv) At the end of the scatter, a version number is updated. This lets the client know whether a new stabilize has been called, in which case it will know that its client side cache may be stale.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> d068b2a90461e934f2b2528804657406481647a7
 4. killServer [id]:
 a) Master tells the target server to clean up: connections, close log file, etc.
 b) Master send SIGKILL to the target server to actually kill the process.
