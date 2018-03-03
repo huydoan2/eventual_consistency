@@ -5,7 +5,7 @@ UT EIDs: sso284 and hd5575
 
 The project implements a distributed key-value store system with eventual consistency. The language used is Go. The structure is as follow: the master program is used to create servers, clients, connections, and read/write data. The master, in brief, simulates the execution of the systems.
 
-Key Ideas: 
+## Key Ideas: 
 
 1. Time: A vectorclock is used to maintain logical time through the system. The clock is updated as defined in Mattern '89. During any interaction between client and server, their vector clocks are synchronized.
 2. Total Order: The server describes a total order based on a combination of the vector clock and the ID that performs the operation. ID breaks ties when two vector clocks are concurrent.
@@ -19,7 +19,7 @@ b) Server cache:
 	On stabilize, the protocol must guarantee that every server sends its information to every other server. However, if done naively this can lead to increased network traffic and O(n^2) messages. To minimise this, we implement a gather-scatter algorithm that generates a MST with a random server as the root. 
 5. Golang RPC is used for communication between processes.
 
-Details of API Implementation:
+## Details of API Implementation:
 
 1. put [clientID] [key] [value]: 
 a) The master calls Put on a client with a key-value pair. 
@@ -101,7 +101,23 @@ a) The program enters a test mode.
 b) Inside test mode, list will list all the available tests and list-desc will give a detailed description of each.
 c) From inside the test mode, any test can be executed by entering its name as presented in the list command.
 
-*Note:
+## Performance:
+
+There are 2 tests in the test suite of the project that test the performance of puts in the system. Time is measured after a combination of puts and stabilize. The tests are listed in `list` command in test mode; and are called `PerformanceTestSimple` and `PerformanceTestSingleServer`. Each performance test is done under 2 extreme settings. The first setting is that of 0 conflict (all clients put different keys) and the next with only conflict (all clients put the same key). These are referred to as "No conflict" and "Only conflict" respectively. In both of these, a stabilize call is made in the end. The measured time is the sum of time taken for 40 puts and a stabilize call.
+
+`PerformanceTestSingleServer` connects 5 clients to a single server and issues 40 puts on the clients in a round robin manner. 
+`PerformanceTestSimple` creates 5 clients, 5 servers and then connects a client to 1 server each.
+
+The median time in msec over 5 runs in each of the 4 configurations is attached.
+
+![Benchmark Plot](benchmark.png)
+
+The following can be interpreted from the results:
+1. System Configuration: Having a single server gives better performance than 5 servers. This can be attributed to the network overhead of stabilize. However, experiments reveal that this accounts for only ~50% of the overhead (due to the MST algorithm that minimises network overhead). Hence, another possibility could be that the experiment is run on a single node with 4 physical cores. Hence the configuration with 10 processes results in 
+OS scheduling conflicts that slow it down as compared to the configuration with only 6 processes.
+2. Put pattern: When puts that always conflict are applied to both the systems, better performance is observed than in a system with no conflict. While no detailed analysis has been performed, this could be attributed to increased memory allocation with puts of different keys vs a single memory over written by different puts.
+
+### Note:
 1. We did not mention the details of checking the validity of arguments and the state of the system such as whether that client/server exists. Look at the code for more details.
 2. The master connects to all processes as a client so that it can make RPC requests to them.
 3. The system can only accomodate 10 processes due to the limitation in vectorclock's implementation
