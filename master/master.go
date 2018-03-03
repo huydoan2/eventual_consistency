@@ -388,6 +388,8 @@ func Cleanup() {
 
 	servers = make(map[int64]*rpc.Client)     // map[server id][server rpc handler]
 	clients = make(map[int64]*rpc.Client)     // map[server id][client rpc handler]
+	serverProcess = make(map[int64]*exec.Cmd) // map[server id][server procees]
+	clientProcess = make(map[int64]*exec.Cmd) // map[client id][client process]
 
 }
 
@@ -418,14 +420,6 @@ func AutomaticTest() {
 	joinServer(2)
 	joinServer(3)
 	joinServer(4)
-
-	// Partition as simple test
-	// breakConnection(0, 2)
-	// breakConnection(0, 3)
-	// breakConnection(0, 4)
-	// breakConnection(1, 2)
-	// breakConnection(1, 3)
-	// breakConnection(1, 4)
 
 	// Join clients
 	joinClient(5, 0)
@@ -964,6 +958,176 @@ func listTests(){
 	fmt.Println("SimplePartition1")
 	fmt.Println("SimplePartition2")
 	fmt.Println("AutomaticTest")
+	fmt.Println("PerformanceTestSingleServer")
+	fmt.Println("PerformanceTestSimple")
+}
+
+func PerformanceTestSingleServerDesc() {
+
+	fmt.Println("############# PerformanceTestSingleServerDesc ###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test connects 5 clients to a single server. 2 sets of 40 requests are executed. The first with no conflict
+and the second with only conflict by putting the same key with from each client`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`Topology: c0-c4 are connected to s0`)
+
+	fmt.Println(`Median results show ~ 23 ms for no conflict and ~ 15 ms for only conflict. This can be explained as most time is
+spent in allocating memory when different keys are given to the server.`)
+
+	fmt.Println()
+
+}
+
+func PerformanceTestSingleServer() {
+	// Create 5 servers
+	joinServer(0)
+
+	// Create 5 client and connect to 1 server
+	joinClient(5, 0)
+	joinClient(6, 0)
+	joinClient(7, 0)
+	joinClient(8, 0)
+	joinClient(9, 0)
+
+	numReq := 80
+	keys := make([]string, numReq)
+	values := make([]string, numReq)
+
+	// Initialize the test keys and values
+	for i := 0; i < numReq/2; i++ {
+		keys[i] = string('0' + i)
+		keys[i+10] = "1" + keys[i]
+	}
+
+	for i := 0; i < numReq; i++ {
+		if i < 26 {
+			values[i] = string('a' + i)
+		} else {
+			values[i] = string('A' + i - 26)
+		}
+	}
+
+	cId := []int64{5, 6, 7, 8, 9}
+
+	// Performance with no conflicts
+	fmt.Println("Performance with no conflicts")
+	start := time.Now()
+	// Put 40 requests on the clients in rotation
+	putNum := 0
+	for req := 0; req < 8; req++ {
+		for i := 0; i < 5; i++ {
+		    put(cId[i], keys[putNum], values[putNum])
+		    putNum += 1
+		}	
+	}
+	stabilize()
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken is %s for %d puts\n", elapsed, putNum)
+
+	// Performance with only conflicts
+	fmt.Println("Performance with only conflicts")
+	start = time.Now()
+	// Put 40 requests on the clients in rotation
+	putNum = 0
+	for req := 0; req < 8; req++ {
+		for i := 0; i < 5; i++ {
+		    put(cId[i], keys[0], values[putNum])
+		    putNum += 1
+		}	
+	}
+	stabilize()
+	elapsed = time.Since(start)
+	fmt.Printf("Time taken is %s for %d puts\n", elapsed, putNum)
+
+}
+
+func PerformanceTestSimpleDesc() {
+
+	fmt.Println("############# PerformanceTestSimpleDesc ###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test creates 5 clients and 5 servers and makes 1 to 1 connection of client-server. 2 sets of 40 requests are executed. The first with no conflict
+and the second with only conflict by putting the same key with from each client`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`Topology: c5-s0, c6-s1, c7-s2, c8-s3, c9-s4, s0-s4 are fully connected`)
+
+	fmt.Println(`Median results show ~ 38 ms for no conflict and ~ 16 ms for only conflict. This can be explained as most time is
+spent in allocating memory when different keys are given to the server.`)
+
+	fmt.Println()
+
+}
+
+func PerformanceTestSimple() {
+	// Create 5 servers
+	joinServer(0)
+	joinServer(1)
+	joinServer(2)
+	joinServer(3)
+	joinServer(4)
+
+	// Create 5 client and connect to 1 server
+	joinClient(5, 0)
+	joinClient(6, 1)
+	joinClient(7, 2)
+	joinClient(8, 3)
+	joinClient(9, 4)
+
+	numReq := 80
+	keys := make([]string, numReq)
+	values := make([]string, numReq)
+
+	// Initialize the test keys and values
+	for i := 0; i < numReq/2; i++ {
+		keys[i] = string('0' + i)
+		keys[i+10] = "1" + keys[i]
+	}
+
+	for i := 0; i < numReq; i++ {
+		if i < 26 {
+			values[i] = string('a' + i)
+		} else {
+			values[i] = string('A' + i - 26)
+		}
+	}
+
+	cId := []int64{5, 6, 7, 8, 9}
+
+	// Performance with no conflicts
+	fmt.Println("Performance with no conflicts")
+	start := time.Now()
+	// Put 40 requests on the clients in rotation
+	putNum := 0
+	for req := 0; req < 8; req++ {
+		for i := 0; i < 5; i++ {
+		    put(cId[i], keys[putNum], values[putNum])
+		    putNum += 1
+		}	
+	}
+	stabilize()
+	elapsed := time.Since(start)
+	fmt.Printf("Time taken is %s for %d puts\n", elapsed, putNum)
+
+	// Performance with only conflicts
+	fmt.Println("Performance with only conflicts")
+	start = time.Now()
+	// Put 40 requests on the clients in rotation
+	putNum = 0
+	for req := 0; req < 8; req++ {
+		for i := 0; i < 5; i++ {
+		    put(cId[i], keys[0], values[putNum])
+		    putNum += 1
+		}	
+	}
+	stabilize()
+	elapsed = time.Since(start)
+	fmt.Printf("Time taken is %s for %d puts\n", elapsed, putNum)
+
 }
 
 func main() {
@@ -1154,6 +1318,8 @@ func main() {
 							SimplePartition1Desc()
 							SimplePartition2Desc()
 							AutomaticTestDesc()
+							PerformanceTestSimpleDesc()
+							PerformanceTestSingleServerDesc()
 						case "SingleClientManyServer1":
 							SingleClientManyServer1()
 							Cleanup()
@@ -1181,7 +1347,15 @@ func main() {
 						case "AutomaticTest":
 							AutomaticTest()
 							Cleanup()
-							fmt.Println()							
+							fmt.Println()	
+						case "PerformanceTestSimple":
+							PerformanceTestSimple()
+							Cleanup()	
+							fmt.Println()
+						case "PerformanceTestSingleServer":
+							PerformanceTestSingleServer()
+							Cleanup()
+							fmt.Println()					
 						case "help":
 							fmt.Println("exit to leave test mode. list to list test names. list-desc for a description of the tests. Enter the test name to execute it")
 						case "exit":
