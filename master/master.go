@@ -38,8 +38,9 @@ func ExecServer(id int64) {
 	if serverErr != nil {
 		panic(serverErr)
 	}
-	exitCode := server.Wait()
-	fmt.Printf("Server %d finished with %v\n", id, exitCode)
+	server.Wait()
+	// exitCode := server.Wait()
+	// fmt.Printf("Server %d finished with %v\n", id, exitCode)
 }
 
 func ExecClient(clientId, serverId int64) {
@@ -50,8 +51,9 @@ func ExecClient(clientId, serverId int64) {
 	if clientErr != nil {
 		panic(clientErr)
 	}
-	exitCode := client.Wait()
-	fmt.Printf("Client %d finished with %v\n", clientId, exitCode)
+	client.Wait()
+	// exitCode := client.Wait()
+	// fmt.Printf("Client %d finished with %v\n", clientId, exitCode)
 }
 
 func joinServer(id int64) {
@@ -374,6 +376,8 @@ func InvalidateClientCache() {
 // Cleanup : send SIGKILL to all of the client/server processes to kill them. This make sure
 // that after the master exits, those processes aren't hanging around
 func Cleanup() {
+
+	fmt.Println("Cleaning up all processes now ...")
 	for _, s := range serverProcess {
 		s.Process.Kill()
 	}
@@ -381,12 +385,29 @@ func Cleanup() {
 	for _, c := range clientProcess {
 		c.Process.Kill()
 	}
+
+	servers = make(map[int64]*rpc.Client)     // map[server id][server rpc handler]
+	clients = make(map[int64]*rpc.Client)     // map[server id][client rpc handler]
+
 }
 
 // PrintUsage : print the usage of the master program. We are keeping it minimal here
 func PrintUsage() {
 	fmt.Println("Invalid command. Please refer to the APIs")
 }
+
+// This test checks the functionality of single client and many servers.
+func AutomaticTestDesc() {
+
+	fmt.Println("############# AutomaticTestDesc	###################")
+
+	fmt.Println()
+
+	fmt.Println(`Does a bunch of randomized puts and gets on a fully connected Topology of servers.`)
+
+	fmt.Println()
+
+} 
 
 // AutomaticTest1 :
 func AutomaticTest() {
@@ -496,6 +517,28 @@ func AutomaticTest() {
 
 }
 
+func SimplePartition1Desc() {
+
+	fmt.Println("############# SimplePartition1Desc	###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks stabilize functionality in the presence of a partition. 5 servers are created
+in 2 partitions. Clients are connected to the servers of a single partition. Stabilize total orders the puts within
+a partition but not across.`)
+	
+	fmt.Println(`Topology: [s0, s1] and [s2, s3, s4] are 2 partitions. c5,c6 are connected to partition 1 and c7,c8,c9 are connected
+to [s2, s3, s4].`)
+
+	fmt.Println(`c5 puts 1:a to s0. c6 puts 1:c to s1. c7 puts 1:b to s2. c8 puts 2:d to either s2 or s3 at random. c9 puts 1:f on s4.
+A get is performed after all puts and read your own write guarantee is maintained. The servers are printed before a stabilize.
+Stabilize is performed separately on both partitions. A get is performed on every client and the correct total ordered reply (c) is returned
+in the first partition and (f) is returned in the second partition.`)
+
+	fmt.Println()
+
+} 
+
 func SimplePartition1() {
 
 	// Create 5 servers
@@ -526,14 +569,14 @@ func SimplePartition1() {
 	put(6, "1", "c")
 	put(7, "1", "b")
 	put(8, "2", "d")
-	put(9, "1", "c")
+	put(9, "1", "f")
 
 	// Gets provide 2 session guarantees but no consistency/total order
 	get(5, "1") // a
 	get(6, "1") // c
 	get(7, "1") // c
 	get(8, "1") // b or ERR_KEY
-	get(9, "1") // c
+	get(9, "1") // f
 
 	printStore(0)
 	printStore(1)
@@ -553,11 +596,32 @@ func SimplePartition1() {
 	// Correct value ordered in each partition
 	get(5, "1") // c
 	get(6, "1") // c
-	get(7, "1") // c
-	get(8, "1") // c
-	get(9, "1") // c
+	get(7, "1") // f
+	get(8, "1") // f
+	get(9, "1") // f
 
 }
+
+func SimplePartition2Desc() {
+
+	fmt.Println("############# SimplePartition2Desc	###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks the system's consistency if a client is switches the partition its connected to after a put. There are 2 servers
+in each partition and a single client. The client is connected to the first partition and a put is performed. The client then disconnects from this partition
+and connects to second partition. Another put is performed. After stabilize, the client switches back to only the first partition. Get on the client must read 
+the most recent put which was sent to the second partition to guarantee read your own writes.`)
+	
+	fmt.Println(`Topology: [s0, s1] and [s2, s3] are 2 partitions. c5 is a single client that switches its connection between partitions.`)
+
+	fmt.Println(`c5 puts 1:a to s0. c5 switches connection to second partition and puts 1:b to s2. Stabilize is called. Now c5 is reconnected to s0.
+For read your own write guarantee, the client must return (b) on a get as that is the most recent.`)
+
+	fmt.Println()
+
+} 
+
 
 func SimplePartition2() {
 
@@ -573,7 +637,7 @@ func SimplePartition2() {
 	breakConnection(1, 2)
 	breakConnection(1, 3)
 
-	// Connect single client to first partitions
+	// Connect single client to first partition
 	joinClient(5, 0)
 	createConnection(5, 1)
 
@@ -635,10 +699,278 @@ func TestPartition() {
 	get(2, "1")
 }
 
+// This test checks the functionality of single client and many servers.
+func SingleClientManyServer1Desc() {
+
+	fmt.Println("############# SingleClientManyServer1Desc	###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks functionality of single client and many servers. 
+A single client is connected to 3 servers at a time. The servers are NOT fully connected.
+The test checks if servers are able to total order when the timestamps are ordered. (not concurrent)`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`c3 puts 1:a to s0. c3 puts 1:b to s1. c3 puts 1:c to s2. A get is performed after every read.
+The gets show the most recent put and stabilize. The server kv store shows different values before stabilize and
+the same value after stabilize.`)
+
+	fmt.Println()
+
+} 
+
+func SingleClientManyServer1() {
+	
+	fmt.Println("############# SingleClientManyServer1 BEGIN ###################")
+
+	// c3 <---> s0
+	joinServer(0)
+	joinClient(3, 0)
+	put(3, "1", "a")
+
+	// c3 <---> s1
+	joinServer(1)
+	createConnection(3, 1)
+	breakConnection(3, 0)
+	get(3, "1")
+	put(3, "1", "b")
+
+	// c3 <---> s2
+	joinServer(2)
+	createConnection(3, 2)
+	breakConnection(3, 1)
+	get(3, "1")
+	put(3, "1", "c")
+	put(3, "2", "e")
+
+	// c3 <--> [s0, s1, s2]
+	createConnection(3, 0)
+	createConnection(3, 1)
+
+	// s0 <--> s1 and s0 <---> s2
+	breakConnection(1, 2)
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Stabilize
+	stabilize()
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Get key from c3
+	get(3, "1")	
+
+	fmt.Println("############# SingleClientManyServer1 COMPLETE	###################")
+}
+
+func SingleClientManyServer2Desc() {
+
+	fmt.Println("############# SingleClientManyServer2Desc ###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks functionality of single client and many servers. 
+A single client is connected to 2 servers at a time. A third server is added at the end with no data.
+The client is then connected to only this server. A get on the client should return the most recent value after stabilize from the new server`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`c3 puts 1:a to s0. c3 puts 1:b to s1. c3 is disconnected from s0 and s1. c3 is connected to s2. Stabilize is called
+The final get retreives the correct (b) value from the new server`)
+
+	fmt.Println()
+
+}
+func SingleClientManyServer2() {
+	
+	fmt.Println("############# SingleClientManyServer2 BEGIN ###################")
+
+	// c3 <---> s0
+	joinServer(0)
+	joinClient(3, 0)
+	put(3, "1", "a")
+
+	// c3 <---> s1
+	joinServer(1)
+	createConnection(3, 1)
+	breakConnection(3, 0)
+	get(3, "1")
+	put(3, "1", "b")
+	put(3, "2", "e")
+
+	// c3 <---> s2
+	joinServer(2)
+	createConnection(3, 2)
+	breakConnection(3, 1)
+
+	// s0 <--> s1 and s0 <---> s2
+	breakConnection(1, 2)
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Stabilize
+	stabilize()
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Get key from c3
+	get(3, "1")	
+
+	fmt.Println("############# SingleClientManyServer2 COMPLETE	###################")
+}
+
+func ManyClientsSingleServer1Desc() {
+
+	fmt.Println("############# ManyClientsSingleServer1Desc ###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks functionality of many clients connected to single server. 
+Multiple clients are connected to the same server and concurrent puts to the same key are performed. Intermediate gets return the 
+most recent value put on the client. After stabilize is called the value from the highest client ID is retained as that is the total
+ordering rule for concurrent operations.`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`c1 puts 1:a to s0. c2 puts 1:b to s1. Get is performed on c1 and c2. This returns a and b respectively.
+Stabilize is called. The final get retreives the correct value (b) from the server on both clients`)
+
+	fmt.Println()
+
+}
+
+func ManyClientsSingleServer1() {
+	
+	fmt.Println("############# ManyClientsSingleServer1 BEGIN ###################")
+
+	// c1 <---> s0 and put
+	joinServer(0)
+	joinClient(1, 0)
+	put(1, "1", "a")	
+	put(1, "2", "y")
+
+	// c3 <---> s1. Put on c2 and get on c1
+	joinClient(2, 0)
+	put(2, "1", "b")
+	put(2, "2", "z")
+	get(1, "1")
+
+	// Check state of all servers
+	printStore(0)
+
+	// Stabilize
+	stabilize()
+
+	// Check state of all servers
+	printStore(0)
+
+	// Get key from c3
+	get(1, "1")	
+	get(2, "1")	
+	get(1, "2")	
+	get(2, "2")	
+
+	fmt.Println("############# ManyClientsSingleServer1 COMPLETE	###################")
+}
+
+
+func ManyClientsManyServers1Desc() {
+
+	fmt.Println("############# ManyClientsManyServers1Desc ###################")
+
+	fmt.Println()
+
+	fmt.Println(`This test checks functionality of many clients connected to many servers.
+Multiple clients are connected to the same server and concurrent puts to the same key are performed. Intermediate gets return the 
+most recent value put on the client. After stabilize is called the value from the highest client ID is retained as that is the total
+ordering rule for concurrent operations.`)
+	// Maintain connection between a client and 1 server at a time
+
+	fmt.Println(`Topology: c3 is connected to s0 and s1. c4 is connected to s2. s0 is connected to s1 and s2.`)
+
+	fmt.Println(`c3 puts 1:a to s0. c3 puts 1:b to s1. c4 puts 1:c to s2. Get is performed on c1 and c2. This returns b and c respectively.
+Stabilize is called. The final get retreives the correct value (c) on both clients`)
+
+	fmt.Println()
+
+}
+
+func ManyClientsManyServers1() {
+	
+	fmt.Println("############# ManyClientsManyServers1 BEGIN ###################")
+
+	// c1 <---> s0 and put 1:a, 2:y
+	joinServer(0)
+	joinClient(3, 0)
+	put(3, "1", "a")	
+	put(3, "2", "y")
+
+	// c3 <---> s2. Put on c3 and get on c3
+	joinServer(1)
+	createConnection(3, 1)
+	breakConnection(3, 0)
+	put(3, "1", "b")
+	put(3, "2", "z")
+	createConnection(3, 0)
+
+	// c4 <--> s2
+	joinServer(2)
+	breakConnection(2, 1)
+	joinClient(4, 2)
+	put(4, "1", "c")
+
+	// Get on clients
+	get(3, "1")
+	get(4, "1")
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Stabilize
+	stabilize()
+
+	// Check state of all servers
+	printStore(0)
+	printStore(1)
+	printStore(2)
+
+	// Get key from c3
+	get(3, "1")	
+	get(3, "1")	
+	get(4, "2")	
+	get(4, "2")	
+
+	fmt.Println("############# ManyClientsManyServers1 COMPLETE	###################")
+}
+
+func listTests(){
+	fmt.Println()
+	fmt.Println("SingleClientManyServer1")
+	fmt.Println("SingleClientManyServer2")
+	fmt.Println("ManyClientsSingleServer1")
+	fmt.Println("ManyClientsManyServers1")
+	fmt.Println("SimplePartition1")
+	fmt.Println("SimplePartition2")
+	fmt.Println("AutomaticTest")
+}
+
 func main() {
-	//SimplePartition1()
+	// SingleClientManyServer()
+	// SimplePartition1()
 	// SimplePartition2()
-	AutomaticTest()
+	// AutomaticTest()
 	// TestPartition()
 
 	defer Cleanup()
@@ -791,6 +1123,79 @@ func main() {
 
 		case "exit":
 			return
+
+		case "help":
+			fmt.Println("Please refer API spec and README. ENTER test to enter test mode")
+
+		case "test":
+			exit := 0
+			fmt.Println("Enter Test")
+			fmt.Print("test> ")
+				for scanner.Scan() {
+					lineTest := scanner.Text()
+					elementsTest := strings.Split(lineTest, " ")
+
+					// Skip empty line
+					if len(elementsTest) == 0 {
+						continue
+					}
+
+					//var id1Test, id2Test int64
+					// var errTest error
+
+					switch elementsTest[0] {
+						case "list":
+							listTests()
+						case "list-desc":
+							SingleClientManyServer1Desc()
+							SingleClientManyServer2Desc()
+							ManyClientsSingleServer1Desc()
+							ManyClientsManyServers1Desc()
+							SimplePartition1Desc()
+							SimplePartition2Desc()
+							AutomaticTestDesc()
+						case "SingleClientManyServer1":
+							SingleClientManyServer1()
+							Cleanup()
+							fmt.Println()
+						case "SingleClientManyServer2":
+							SingleClientManyServer2()
+							Cleanup()
+							fmt.Println()							
+						case "ManyClientsSingleServer1":
+							ManyClientsSingleServer1()
+							Cleanup()
+							fmt.Println()							
+						case "ManyClientsManyServers1":
+							ManyClientsManyServers1()
+							Cleanup()
+							fmt.Println()							
+						case "SimplePartition1":
+							SimplePartition1()
+							Cleanup()
+							fmt.Println()							
+						case "SimplePartition2":
+							SimplePartition2()
+							Cleanup()
+							fmt.Println()							
+						case "AutomaticTest":
+							AutomaticTest()
+							Cleanup()
+							fmt.Println()							
+						case "help":
+							fmt.Println("exit to leave test mode. list to list test names. list-desc for a description of the tests. Enter the test name to execute it")
+						case "exit":
+							exit = 1
+							fmt.Println("Exiting test mode")
+							break
+					}
+				if exit == 1{
+					break
+				}
+				fmt.Println()
+				fmt.Print("test> ")
+				continue
+				}
 
 		default:
 			goto InvalidInput
