@@ -98,8 +98,9 @@ b) Master prints the data store out to Stdin.
 
 10. test
 a) The program enters a test mode. 
-b) Inside test mode, list will list all the available tests and list-desc will give a detailed description of each.
-c) From inside the test mode, any test can be executed by entering its name as presented in the list command.
+b) Inside test mode, "list" command will list all the available tests we provided and "list-desc" command will give a detailed description of each test.
+c) From inside the test mode, any test can be executed by entering its name as presented in the "list" command.
+d) Use the "exit" command to exit the test mode. Note that you cannot run api commands in the test mode.
 
 *Note:
 1. We did not mention the details of checking the validity of arguments and the state of the system such as whether that client/server exists. Look at the code for more details.

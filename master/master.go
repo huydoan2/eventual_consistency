@@ -38,9 +38,9 @@ func ExecServer(id int64) {
 	if serverErr != nil {
 		panic(serverErr)
 	}
-	server.Wait()
-	// exitCode := server.Wait()
-	// fmt.Printf("Server %d finished with %v\n", id, exitCode)
+	//server.Wait()
+	exitCode := server.Wait()
+	fmt.Printf("Server %d finished with %v\n", id, exitCode)
 }
 
 func ExecClient(clientId, serverId int64) {
@@ -51,9 +51,9 @@ func ExecClient(clientId, serverId int64) {
 	if clientErr != nil {
 		panic(clientErr)
 	}
-	client.Wait()
-	// exitCode := client.Wait()
-	// fmt.Printf("Client %d finished with %v\n", clientId, exitCode)
+	//client.Wait()
+	exitCode := client.Wait()
+	fmt.Printf("Client %d finished with %v\n", clientId, exitCode)
 }
 
 func joinServer(id int64) {
@@ -409,7 +409,7 @@ func AutomaticTestDesc() {
 
 	fmt.Println()
 
-} 
+}
 
 // AutomaticTest1 :
 func AutomaticTest() {
@@ -520,7 +520,7 @@ func SimplePartition1Desc() {
 	fmt.Println(`This test checks stabilize functionality in the presence of a partition. 5 servers are created
 in 2 partitions. Clients are connected to the servers of a single partition. Stabilize total orders the puts within
 a partition but not across.`)
-	
+
 	fmt.Println(`Topology: [s0, s1] and [s2, s3, s4] are 2 partitions. c5,c6 are connected to partition 1 and c7,c8,c9 are connected
 to [s2, s3, s4].`)
 
@@ -531,7 +531,7 @@ in the first partition and (f) is returned in the second partition.`)
 
 	fmt.Println()
 
-} 
+}
 
 func SimplePartition1() {
 
@@ -606,7 +606,7 @@ func SimplePartition2Desc() {
 in each partition and a single client. The client is connected to the first partition and a put is performed. The client then disconnects from this partition
 and connects to second partition. Another put is performed. After stabilize, the client switches back to only the first partition. Get on the client must read 
 the most recent put which was sent to the second partition to guarantee read your own writes.`)
-	
+
 	fmt.Println(`Topology: [s0, s1] and [s2, s3] are 2 partitions. c5 is a single client that switches its connection between partitions.`)
 
 	fmt.Println(`c5 puts 1:a to s0. c5 switches connection to second partition and puts 1:b to s2. Stabilize is called. Now c5 is reconnected to s0.
@@ -614,8 +614,7 @@ For read your own write guarantee, the client must return (b) on a get as that i
 
 	fmt.Println()
 
-} 
-
+}
 
 func SimplePartition2() {
 
@@ -711,10 +710,10 @@ the same value after stabilize.`)
 
 	fmt.Println()
 
-} 
+}
 
 func SingleClientManyServer1() {
-	
+
 	fmt.Println("############# SingleClientManyServer1 BEGIN ###################")
 
 	// c3 <---> s0
@@ -758,7 +757,7 @@ func SingleClientManyServer1() {
 	printStore(2)
 
 	// Get key from c3
-	get(3, "1")	
+	get(3, "1")
 
 	fmt.Println("############# SingleClientManyServer1 COMPLETE	###################")
 }
@@ -781,7 +780,7 @@ The final get retreives the correct (b) value from the new server`)
 
 }
 func SingleClientManyServer2() {
-	
+
 	fmt.Println("############# SingleClientManyServer2 BEGIN ###################")
 
 	// c3 <---> s0
@@ -819,7 +818,7 @@ func SingleClientManyServer2() {
 	printStore(2)
 
 	// Get key from c3
-	get(3, "1")	
+	get(3, "1")
 
 	fmt.Println("############# SingleClientManyServer2 COMPLETE	###################")
 }
@@ -844,13 +843,13 @@ Stabilize is called. The final get retreives the correct value (b) from the serv
 }
 
 func ManyClientsSingleServer1() {
-	
+
 	fmt.Println("############# ManyClientsSingleServer1 BEGIN ###################")
 
 	// c1 <---> s0 and put
 	joinServer(0)
 	joinClient(1, 0)
-	put(1, "1", "a")	
+	put(1, "1", "a")
 	put(1, "2", "y")
 
 	// c3 <---> s1. Put on c2 and get on c1
@@ -869,14 +868,13 @@ func ManyClientsSingleServer1() {
 	printStore(0)
 
 	// Get key from c3
-	get(1, "1")	
-	get(2, "1")	
-	get(1, "2")	
-	get(2, "2")	
+	get(1, "1")
+	get(2, "1")
+	get(1, "2")
+	get(2, "2")
 
 	fmt.Println("############# ManyClientsSingleServer1 COMPLETE	###################")
 }
-
 
 func ManyClientsManyServers1Desc() {
 
@@ -900,13 +898,13 @@ Stabilize is called. The final get retreives the correct value (c) on both clien
 }
 
 func ManyClientsManyServers1() {
-	
+
 	fmt.Println("############# ManyClientsManyServers1 BEGIN ###################")
 
 	// c1 <---> s0 and put 1:a, 2:y
 	joinServer(0)
 	joinClient(3, 0)
-	put(3, "1", "a")	
+	put(3, "1", "a")
 	put(3, "2", "y")
 
 	// c3 <---> s2. Put on c3 and get on c3
@@ -941,15 +939,15 @@ func ManyClientsManyServers1() {
 	printStore(2)
 
 	// Get key from c3
-	get(3, "1")	
-	get(3, "1")	
-	get(4, "2")	
-	get(4, "2")	
+	get(3, "1")
+	get(3, "1")
+	get(4, "2")
+	get(4, "2")
 
 	fmt.Println("############# ManyClientsManyServers1 COMPLETE	###################")
 }
 
-func listTests(){
+func listTests() {
 	fmt.Println()
 	fmt.Println("SingleClientManyServer1")
 	fmt.Println("SingleClientManyServer2")
@@ -1019,9 +1017,9 @@ func PerformanceTestSingleServer() {
 	putNum := 0
 	for req := 0; req < 8; req++ {
 		for i := 0; i < 5; i++ {
-		    put(cId[i], keys[putNum], values[putNum])
-		    putNum += 1
-		}	
+			put(cId[i], keys[putNum], values[putNum])
+			putNum += 1
+		}
 	}
 	stabilize()
 	elapsed := time.Since(start)
@@ -1034,9 +1032,9 @@ func PerformanceTestSingleServer() {
 	putNum = 0
 	for req := 0; req < 8; req++ {
 		for i := 0; i < 5; i++ {
-		    put(cId[i], keys[0], values[putNum])
-		    putNum += 1
-		}	
+			put(cId[i], keys[0], values[putNum])
+			putNum += 1
+		}
 	}
 	stabilize()
 	elapsed = time.Since(start)
@@ -1105,9 +1103,9 @@ func PerformanceTestSimple() {
 	putNum := 0
 	for req := 0; req < 8; req++ {
 		for i := 0; i < 5; i++ {
-		    put(cId[i], keys[putNum], values[putNum])
-		    putNum += 1
-		}	
+			put(cId[i], keys[putNum], values[putNum])
+			putNum += 1
+		}
 	}
 	stabilize()
 	elapsed := time.Since(start)
@@ -1120,9 +1118,9 @@ func PerformanceTestSimple() {
 	putNum = 0
 	for req := 0; req < 8; req++ {
 		for i := 0; i < 5; i++ {
-		    put(cId[i], keys[0], values[putNum])
-		    putNum += 1
-		}	
+			put(cId[i], keys[0], values[putNum])
+			putNum += 1
+		}
 	}
 	stabilize()
 	elapsed = time.Since(start)
@@ -1295,81 +1293,81 @@ func main() {
 			exit := 0
 			fmt.Println("Enter Test")
 			fmt.Print("test> ")
-				for scanner.Scan() {
-					lineTest := scanner.Text()
-					elementsTest := strings.Split(lineTest, " ")
+			for scanner.Scan() {
+				lineTest := scanner.Text()
+				elementsTest := strings.Split(lineTest, " ")
 
-					// Skip empty line
-					if len(elementsTest) == 0 {
-						continue
-					}
+				// Skip empty line
+				if len(elementsTest) == 0 {
+					continue
+				}
 
-					//var id1Test, id2Test int64
-					// var errTest error
+				//var id1Test, id2Test int64
+				// var errTest error
 
-					switch elementsTest[0] {
-						case "list":
-							listTests()
-						case "list-desc":
-							SingleClientManyServer1Desc()
-							SingleClientManyServer2Desc()
-							ManyClientsSingleServer1Desc()
-							ManyClientsManyServers1Desc()
-							SimplePartition1Desc()
-							SimplePartition2Desc()
-							AutomaticTestDesc()
-							PerformanceTestSimpleDesc()
-							PerformanceTestSingleServerDesc()
-						case "SingleClientManyServer1":
-							SingleClientManyServer1()
-							Cleanup()
-							fmt.Println()
-						case "SingleClientManyServer2":
-							SingleClientManyServer2()
-							Cleanup()
-							fmt.Println()							
-						case "ManyClientsSingleServer1":
-							ManyClientsSingleServer1()
-							Cleanup()
-							fmt.Println()							
-						case "ManyClientsManyServers1":
-							ManyClientsManyServers1()
-							Cleanup()
-							fmt.Println()							
-						case "SimplePartition1":
-							SimplePartition1()
-							Cleanup()
-							fmt.Println()							
-						case "SimplePartition2":
-							SimplePartition2()
-							Cleanup()
-							fmt.Println()							
-						case "AutomaticTest":
-							AutomaticTest()
-							Cleanup()
-							fmt.Println()	
-						case "PerformanceTestSimple":
-							PerformanceTestSimple()
-							Cleanup()	
-							fmt.Println()
-						case "PerformanceTestSingleServer":
-							PerformanceTestSingleServer()
-							Cleanup()
-							fmt.Println()					
-						case "help":
-							fmt.Println("exit to leave test mode. list to list test names. list-desc for a description of the tests. Enter the test name to execute it")
-						case "exit":
-							exit = 1
-							fmt.Println("Exiting test mode")
-							break
-					}
-				if exit == 1{
+				switch elementsTest[0] {
+				case "list":
+					listTests()
+				case "list-desc":
+					SingleClientManyServer1Desc()
+					SingleClientManyServer2Desc()
+					ManyClientsSingleServer1Desc()
+					ManyClientsManyServers1Desc()
+					SimplePartition1Desc()
+					SimplePartition2Desc()
+					AutomaticTestDesc()
+					PerformanceTestSimpleDesc()
+					PerformanceTestSingleServerDesc()
+				case "SingleClientManyServer1":
+					SingleClientManyServer1()
+					Cleanup()
+					fmt.Println()
+				case "SingleClientManyServer2":
+					SingleClientManyServer2()
+					Cleanup()
+					fmt.Println()
+				case "ManyClientsSingleServer1":
+					ManyClientsSingleServer1()
+					Cleanup()
+					fmt.Println()
+				case "ManyClientsManyServers1":
+					ManyClientsManyServers1()
+					Cleanup()
+					fmt.Println()
+				case "SimplePartition1":
+					SimplePartition1()
+					Cleanup()
+					fmt.Println()
+				case "SimplePartition2":
+					SimplePartition2()
+					Cleanup()
+					fmt.Println()
+				case "AutomaticTest":
+					AutomaticTest()
+					Cleanup()
+					fmt.Println()
+				case "PerformanceTestSimple":
+					PerformanceTestSimple()
+					Cleanup()
+					fmt.Println()
+				case "PerformanceTestSingleServer":
+					PerformanceTestSingleServer()
+					Cleanup()
+					fmt.Println()
+				case "help":
+					fmt.Println("exit to leave test mode. list to list test names. list-desc for a description of the tests. Enter the test name to execute it")
+				case "exit":
+					exit = 1
+					fmt.Println("Exiting test mode")
+					break
+				}
+				if exit == 1 {
 					break
 				}
 				fmt.Println()
 				fmt.Print("test> ")
 				continue
-				}
+			}
 
 		default:
 			goto InvalidInput
